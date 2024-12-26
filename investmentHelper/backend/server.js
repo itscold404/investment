@@ -5,7 +5,7 @@ import express from "express";
 dotevn.config({ path: "../.env" });
 
 const backend = express();
-const port = process.env.BACKEND_PORT;
+const port = process.env.VITE_BACKEND_PORT;
 
 const alpaca = new Alpaca({
   keyId: process.env.API_KEY,
@@ -30,6 +30,9 @@ backend.get("/test/printAccount", async (req, res) => {
   try {
     const account = await alpaca.getAccount();
     console.log(account);
+    console.log("*******************************");
+    console.log("*** SERVER CONNECTION VALID ***");
+    console.log("*******************************");
   } catch (err) {
     res.status(500).json({ error: err.message });
     translate_error(err);
