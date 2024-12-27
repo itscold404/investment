@@ -1,27 +1,38 @@
 import axios from "axios";
+import dotevn from "dotenv";
+import Stock from "./stock.js";
+
+dotevn.config({ path: "../.env" });
 
 const polygonBot = {
-  baseURL: "/", // Polygon.io base url
-  apiKey: "/", // Polygon.io API key
+  baseURL: process.env.POLYGON_BASE_URL, // Polygon.io base url
+  apiKey: process.env.POLYGON_API_KEY, // Polygon.io API key
+
+  // TODO: make it so that these values can be set by the front end
   returnLowerBound: 3, // Lower bound of stock price change for 1 day
   returnHigherBound: 40, // Higher bound of stock price change for 1 day
 
-  // All stocks in the stock market with percent change [returnLowerBound, returnHigherBound]
+  // All stocks in the stock market with percent change
+  // [returnLowerBound, returnHigherBound]
   stocks: [],
 
-  //------------------------------------------------------------------------------------------------------
-  // Constructor
-  //------------------------------------------------------------------------------------------------------
-  create(baseURL, apiKey) {
-    this.baseURL = baseURL;
-    this.apiKey = apiKey;
-    this.fillStocksList();
-    return this;
+  //------------------------------------------------------------------------
+  // Sorts the list of stocks in decending 1 day percent change
+  //------------------------------------------------------------------------
+  sortStockDescending() {
+    this.stocks.sort((a, b) => b.dayPercentChange - a.dayPercentChange);
   },
 
-  //------------------------------------------------------------------------------------------------------
+  //------------------------------------------------------------------------
+  // Sorts the list of stocks in decending 1 day percent change
+  //------------------------------------------------------------------------
+  sortStockAscending() {
+    this.stocks.sort((a, b) => a.dayPercentChange - b.dayPercentChange);
+  },
+
+  //------------------------------------------------------------------------
   // Populate the list of stocks
-  //------------------------------------------------------------------------------------------------------
+  //------------------------------------------------------------------------
   async fillStocksList() {
     let queryURL = `${this.baseURL}/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=${this.apiKey}`;
 
@@ -32,18 +43,20 @@ const polygonBot = {
       allStocks.forEach((s) => {
         let percentChange = s.todaysChangePerc;
         if (this.returnLowerBound < percentChange && percentChange < this.returnHigherBound) {
-          this.stocks.push(s.ticker);
+          let stock = new Stock(s.ticker, percentChange);
+          this.stocks.push(stock);
         }
       });
+      this.sortStockDescending();
       console.log(this.stocks);
     } catch (err) {
       console.error("Error querying Polygon.io to get stock symbols:", err);
     }
   },
 
-  //------------------------------------------------------------------------------------------------------
-  // Get recommendations for what stocks to buy
-  //------------------------------------------------------------------------------------------------------
+  //------------------------------------------------------------------------
+  // Get recommendations for what stocks to buy based on the news
+  //------------------------------------------------------------------------
   async getStockSuggestions() {
     return 0;
   },
