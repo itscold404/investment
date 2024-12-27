@@ -5,14 +5,24 @@ import StockSuggestionPage from "../components/StockSuggestionPage.vue";
 const routes = [
   {
     path: "/",
-    name: "Help Selection Page",
+    name: "HelpSelectionPage",
     component: HelpSelectionPage,
   },
   {
     path: "/StockSuggestionPage",
-    name: "Stock Suggestion Page",
+    name: "StockSuggestionPage",
     component: StockSuggestionPage,
   },
+  // {
+  //   path: "/PaperTrading",
+  //   name: "Paper Trading",
+  //   component: // fill later,
+  // },
+  // {
+  //   path: "/RealTrading",
+  //   name: "Real Trading",
+  //   component: // fill later,
+  // },
 ];
 
 const router = createRouter({

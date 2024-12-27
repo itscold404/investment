@@ -6,9 +6,12 @@ import router from "./router/router.js";
 
 createApp(App).use(router).mount("#app");
 
-const backend_port = import.meta.env.VITE_BACKEND_PORT;
-console.log("backend port is", backend_port);
-const response = await axios.get(`http://localhost:${backend_port}/test/printAccount`);
-message = response.data.message;
-
-console.log(message);
+// Print out some account info to check that it is connected
+try {
+  const backend_port = import.meta.env.VITE_BACKEND_PORT;
+  const response = await axios.get(`http://localhost:${backend_port}/test/printAccount`);
+  message = response.data.message;
+  console.log(message);
+} catch (err) {
+  console.log(err);
+}
