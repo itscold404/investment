@@ -9,8 +9,8 @@ const polygonBot = {
   apiKey: process.env.POLYGON_API_KEY, // Polygon.io API key
 
   // TODO: make it so that these values can be set by the front end
-  returnLowerBound: 3, // Lower bound of stock price change for 1 day
-  returnHigherBound: 40, // Higher bound of stock price change for 1 day
+  returnLowerBound: 10, // Lower bound of stock price change for 1 day
+  returnHigherBound: 30, // Higher bound of stock price change for 1 day
 
   // All stocks in the stock market with percent change
   // [returnLowerBound, returnHigherBound]
@@ -49,10 +49,16 @@ const polygonBot = {
       });
       this.sortStockDescending();
       console.log(this.stocks);
+      console.log(this.stocks.length);
     } catch (err) {
       console.error("Error querying Polygon.io to get stock symbols:", err);
     }
   },
+
+  //------------------------------------------------------------------------
+  // Populate the list of stocks with news
+  //------------------------------------------------------------------------
+  async fillStockNews() {},
 
   //------------------------------------------------------------------------
   // Get recommendations for what stocks to buy based on the news
