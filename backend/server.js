@@ -1,7 +1,7 @@
 import Alpaca from "@alpacahq/alpaca-trade-api";
 import dotevn from "dotenv";
 import express from "express";
-import polygonBot from "./polygonBot.js";
+import newsBot from "./newsBot.js";
 
 dotevn.config({ path: "../.env" });
 
@@ -14,8 +14,8 @@ const PAPER_SECRET = process.env.SECRET_API_KEY;
 
 // TODO: remove this after testing. Should be called when front end decides
 // the range
-polygonBot.fillStocksList();
-polygonBot.fillStockNews();
+await newsBot.fillStocksList();
+await newsBot.fillStockNews();
 
 //------------------------------------------------------------------------
 // Connection things
