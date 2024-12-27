@@ -9,8 +9,8 @@ dotevn.config({ path: "../.env" });
 // Constants and Globals
 //------------------------------------------------------------------------
 const port = process.env.VITE_BACKEND_PORT;
-const PAPER_API = process.env.API_KEY;
-const PAPER_SECRET = process.env.SECRET_API_KEY;
+const PAPER_API = process.env.ALPACA_PAPER_API_KEY;
+const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
 
 // TODO: remove this after testing. Should be called when front end decides
 // the range
