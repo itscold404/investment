@@ -1,17 +1,22 @@
-<script setup>
-defineProps({
-  msg: String,
-});
-</script>
-
+<!-- Page to display stock suggestions -->
 <template>
   <div>
-    <h1>{{ msg }}</h1>
     <div class="card">
       <p>hello</p>
+      <button type="button" @click="goBack">"<=="</button>
     </div>
   </div>
 </template>
+
+<script>
+export default {
+  methods: {
+    goBack() {
+      this.$router.push({ name: "HelpSelectionPage" });
+    },
+  },
+};
+</script>
 
 <style>
 .card {

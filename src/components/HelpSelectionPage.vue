@@ -1,3 +1,4 @@
+<!-- INITAL PAGE -->
 <template>
   <div>
     <h1>{{ "How can I help you?" }}</h1>
@@ -13,13 +14,14 @@
 export default {
   methods: {
     goToSuggestions() {
-      this.$router.push("/StockSuggestionPage");
+      this.$router.push({ name: "StockSuggestionPage" });
     },
     goToTesting() {},
     goToTrading() {},
   },
 };
 </script>
+
 <style>
 .card {
   display: flex;
