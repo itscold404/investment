@@ -10,6 +10,10 @@ const newsBot = {
   alpacaAPIKey: process.env.ALPACA_PAPER_API_KEY, // Polygon.io base url
   alpacaSecret: process.env.ALPACA_SECRET_API_KEY, // Polygon.io API key
   relevantDate: 7, // Number of days that passed of relevant news article
+  nameToSymbol: new Map(), // Maps name of stock to its symbol
+
+  //Port for sentiment analysis API
+  sentimentAnalysisPort: process.env.SENTIMENT_ANALYSIS_PORT,
 
   // Number of articles to receive per API call to Polygon.io and
   // Alpaca for stock news
@@ -17,12 +21,6 @@ const newsBot = {
 
   // Number of stocks per API request to Alpaca for news
   stocksPerRequestBatch: 20,
-
-  // TODO: make it so that these values can be set by the front-end
-  returnLowerBound: 5, // Lower bound of stock price change for 1 day
-  returnHigherBound: 30, // Higher bound of stock price change for 1 day
-
-  nameToSymbol: new Map(), // Maps name of stock to its symbol
 
   // All stocks, as a Stock object in the stock market with percent
   // change within [returnLowerBound, returnHigherBound].
@@ -59,19 +57,24 @@ const newsBot = {
   },
 
   //------------------------------------------------------------------------
-  // Populate the list of stocks
+  // Populate the list of stocks with percent change of
+  // [lowerBound, upperBound]
+  //
+  // lowerBound: Lower bound of stock price change for 1 day
+  // upperBound: Higher bound of stock price change for 1 day
   //------------------------------------------------------------------------
-  async fillStocksList() {
+  async fillStocksList(lowerBound, upperBound) {
     let queryURL = `${this.polygonBaseURL}/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=${this.polygonAPIKey}`;
-    // let queryURL = `${this.polygonBaseURL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=TSLA&apiKey=${this.polygonAPIKey}`;
+    // let queryURL = `${this.polygonBaseURL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=KULR&apiKey=${this.polygonAPIKey}`;
 
+    console.log(lowerBound, upperBound);
     try {
       const response = await axios.get(queryURL);
       const allStocks = response.data.tickers;
 
       allStocks.forEach((s) => {
         let percentChange = s.todaysChangePerc;
-        if (this.returnLowerBound < percentChange && percentChange < this.returnHigherBound) {
+        if (lowerBound < percentChange && percentChange < upperBound) {
           let stock = new Stock(s.ticker, percentChange);
           this.stocks.set(s.ticker, stock);
         }
@@ -96,14 +99,14 @@ const newsBot = {
         const news = response.data;
 
         news.results.forEach((newsArticle) => {
-          // Only relevant news
+          // Only add relevant news
           if (this.withinRelevantTime(newsArticle.published_utc)) {
             let newsMap = new Map();
             newsMap.set("date", newsArticle.published_utc);
             newsMap.set("title", newsArticle.title);
 
-            // For Polygon.io, get the sentiment reasoning, if it exists, and add it to the
-            // description
+            // For Polygon.io, get the sentiment reasoning for this stock, if it
+            // exists, and add it to the description
             let descr = newsArticle.description;
             if (newsArticle.hasOwnProperty("insights")) {
               newsArticle.insights.forEach((insight) => {
@@ -114,6 +117,7 @@ const newsBot = {
             }
             newsMap.set("description", descr);
             value.news.set(newsArticle.article_url, newsMap);
+            this.stocks.get(key).numNews += 1;
           }
         });
       } catch (err) {
@@ -134,11 +138,11 @@ const newsBot = {
       "APCA-API-SECRET-KEY": this.alpacaSecret,
     };
 
-    let numStocks = 0;
-    let numPages = 0;
-    let articleCount = 0;
-    let maxArticles = 0;
-    let stockBatch = [];
+    let numStocks = 0; // Which "index" this loop is on
+    let numBatchesSent = 0; // Number of batches of requests sent to the API
+    let articleCount = 0; // Number of total articles received
+    let maxArticles = 0; // Maximum number of articles received from a request from a batch
+    let stockBatch = []; // The batch of stock symbols to request news of
     for (const key of this.stocks.keys()) {
       numStocks += 1;
       stockBatch.push(key);
@@ -149,7 +153,7 @@ const newsBot = {
 
         console.log("Requesting news on batch:", symbols);
 
-        numPages += 1; //remove after testing
+        numBatchesSent += 1;
         let params = {
           symbols: symbols,
           start: date,
@@ -176,6 +180,7 @@ const newsBot = {
                 newNews.set("description", newsArticle.summary);
 
                 this.stocks.get(ticker).news.set(newsArticle.url, newNews);
+                this.stocks.get(ticker).numNews += 1;
               }
             });
           });
@@ -186,22 +191,92 @@ const newsBot = {
           console.error("Error querying Alpaca to get stock news", err);
         }
 
+        // Empty the parameter to fill with next batch of stock symbols
         stockBatch = [];
       }
     }
 
     console.log("**Alpaca has a limit of 50 articles per page**");
     console.log("This iteration:");
-    console.log("               Stocks per batch request:", this.stocksPerRequestBatch);
-    console.log("               Number of stocks:", numStocks);
-    console.log("               Average articles per page:", articleCount / numPages);
-    console.log("               Max articles per page:", maxArticles);
+    console.log("       Stocks per batch request:", this.stocksPerRequestBatch);
+    console.log("       Number of stocks:", numStocks);
+    console.log("       Average articles per page:", articleCount / numBatchesSent);
+    console.log("       Max articles per page:", maxArticles);
   },
+
+  //------------------------------------------------------------------------
+  // Perform sentiment Analysis all news on the stocks. Sends all news
+  // in one batch.
+  //------------------------------------------------------------------------
+  async getSentimentAnalysis() {
+    // Create two arrays, one of identifiers and one of value's to run in
+    // sentiment analysis. Send as one batch to take advantage of
+    // transformers parellel processing and reduce sending request overhead
+    let id = []; // Array of [stock symbol, url]
+    let newsToAnalyze = []; // Array of [title + description]
+
+    for (const [key, stock] of this.stocks) {
+      for (const url of stock.news.keys()) {
+        let currID = [key, url];
+        id.push(currID);
+
+        let currNewsTitle = stock.news.get(url).get("title");
+        let currNewsDesc = stock.news.get(url).get("description");
+        let ValueToProcess = currNewsTitle.concat(" ").concat(currNewsDesc);
+        newsToAnalyze.push(ValueToProcess);
+      }
+    }
+
+    let scores = [];
+    try {
+      let queryURL = `http://localhost:${this.sentimentAnalysisPort}/analyze`;
+      const response = await axios.post(queryURL, newsToAnalyze);
+      scores = response.data["analysis"];
+    } catch (err) {
+      console.error("Failed to get sentiment analysis:", err);
+    }
+
+    // Log a sanity check
+    console.log("Ensure the numbers below are the same:");
+    console.log("       Number of news sent to be processed:", newsToAnalyze.length);
+    console.log("       Number of ids created", id.length);
+    console.log("       Number of scores returned from processing", scores.length);
+
+    // Populate our map of all stocks with the analysis results
+    if (scores.length === id.length && scores.length === newsToAnalyze.length) {
+      for (let i = 0; i < id.length; ++i) {
+        let analysisScore = scores[i];
+        let symbol = id[i][0];
+        let url = id[i][1];
+
+        if (analysisScore === 1) {
+          this.stocks.get(symbol).posNewsList.push([url, newsToAnalyze[i]]);
+        } else if (analysisScore === -1) {
+          this.stocks.get(symbol).negNewsList.push([url, newsToAnalyze[i]]);
+        } else {
+          this.stocks.get(symbol).neuNewsList.push([url, newsToAnalyze[i]]);
+        }
+
+        this.stocks.get(symbol).sentScore += analysisScore;
+      }
+    } else {
+      console.error("LENGTH OF SCORES FROM SENTIMENT ANALYSIS DOES NOT MATCH LENGTH OF ID'S");
+    }
+  },
+
+  //------------------------------------------------------------------------
+  // Format the articles to be displayed on the front end
+  //------------------------------------------------------------------------
+  async prepareNews() {},
 
   //------------------------------------------------------------------------
   // Get recommendations for what stocks to buy based on the news
   //------------------------------------------------------------------------
-  async getStockSuggestions() {
+  async getStockSuggestions(lower, upper) {
+    await newsBot.fillStocksList(lower, upper);
+    await newsBot.fillStockNews();
+    await newsBot.getSentimentAnalysis();
+    await this.prepareNews();
     return 0;
   },
 };

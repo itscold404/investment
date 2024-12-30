@@ -1,12 +1,31 @@
-<script setup>
-import HelpSelectionPage from "./components/HelpSelectionPage.vue";
-</script>
-
 <template>
-  <div>
+  <div v-if="!receivedError">
     <router-view></router-view>
   </div>
+  <div v-else>
+    <h2>Make sure you turned on server.js!</h2>
+    <h4>(refresh after it has been booted up)</h4>
+  </div>
 </template>
+
+<script>
+const backend_port = import.meta.env.VITE_BACKEND_PORT;
+import axios from "axios";
+export default {
+  data() {
+    return {
+      receivedError: false,
+    };
+  },
+  async mounted() {
+    try {
+      await axios.get(`http://localhost:${backend_port}/test/printAccount`);
+    } catch (err) {
+      this.receivedError = true;
+    }
+  },
+};
+</script>
 
 <style scoped>
 .logo {

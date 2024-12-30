@@ -1,6 +1,9 @@
 # environment file
 .env
 
+# venv
+venv
+
 # Logs
 logs
 *.log

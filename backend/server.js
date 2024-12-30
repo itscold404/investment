@@ -1,6 +1,7 @@
 import Alpaca from "@alpacahq/alpaca-trade-api";
 import dotevn from "dotenv";
 import express from "express";
+import cors from "cors";
 import newsBot from "./newsBot.js";
 
 dotevn.config({ path: "../.env" });
@@ -8,14 +9,13 @@ dotevn.config({ path: "../.env" });
 //------------------------------------------------------------------------
 // Constants and Globals
 //------------------------------------------------------------------------
-const port = process.env.VITE_BACKEND_PORT;
+const BACKEND_PORT = process.env.VITE_BACKEND_PORT;
+const FRONT_PORT = process.env.FRONT_END_PORT;
 const PAPER_API = process.env.ALPACA_PAPER_API_KEY;
 const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
 
 // TODO: remove this after testing. Should be called when front end decides
 // the range
-await newsBot.fillStocksList();
-await newsBot.fillStockNews();
 
 //------------------------------------------------------------------------
 // Connection things
@@ -27,6 +27,13 @@ const alpacaPaper = new Alpaca({
 });
 
 const backend = express();
+backend
+  .use(
+    cors({
+      origin: `http://localhost:${FRONT_PORT}`, // Only talk to this port
+    })
+  )
+  .use(express.json());
 
 //------------------------------------------------------------------------
 // Translate error messages to be user understandable
@@ -60,11 +67,14 @@ backend.get("/test/printAccount", async (req, res) => {
 //------------------------------------------------------------------------
 // Stock suggestion page functions
 //------------------------------------------------------------------------
-backend.get("/stockSuggestions", async (req, res) => {
-  let thing = polyBot.getStockSuggestions();
-  console.log(thing);
+backend.post("/stockSuggestions", async (req, res) => {
+  console.log("received button press");
+  let lower = req.body.lowerBound;
+  let upper = req.body.upperBound;
+  let thing = await newsBot.getStockSuggestions(lower, upper);
+  res.send("Success");
 });
 
-backend.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+backend.listen(BACKEND_PORT, () => {
+  console.log(`Server running on http://localhost:${BACKEND_PORT}`);
 });
