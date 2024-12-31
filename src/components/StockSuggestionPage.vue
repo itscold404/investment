@@ -201,13 +201,16 @@ export default {
         });
       } else {
         // Default: Sort by which stock has the newest news. If there is a tie,
-        // sort by number of news then by highest sentiment score
+        // sort by higest percent change, number of news then by highest sentiment score
         stocksCopy.sort((a, b) => {
           if (a.newestNewsDate === b.newestNewsDate) {
-            if (a.numNews === b.numNews) {
-              return a.sentScore < b.sentScore ? 1 : -1;
+            if (a.dayPercentChange === b.dayPercentChange) {
+              if (a.numNews === b.numNews) {
+                return a.sentScore < b.sentScore ? 1 : -1;
+              }
+              return a.numNews < b.numNews ? 1 : -1;
             }
-            return a.numNews < b.numNews ? 1 : -1;
+            return a.dayPercentChange < b.dayPercentChange ? 1 : -1;
           }
           return a.newestNewsDate < b.newestNewsDate ? 1 : -1;
         });
