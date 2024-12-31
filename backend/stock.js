@@ -1,8 +1,10 @@
 class Stock {
   symbol = "";
   dayPercentChange = 0; // Percent change of stock today
+  lastPrice = 0; // Last market price of this stock
   sentScore = 0; // The sentement score of the news searched for
   numNews = 0; // The number of news articles within the relevant period
+  newestNewsDate = ""; // The most recent date of the news on this stock
   posNewsList = []; // Array of [url, title+description] of positive news
   neuNewsList = []; // Array of [url, title+description] of neutral news
   negNewsList = []; // Array of [url, title+description] of negative news
@@ -18,9 +20,10 @@ class Stock {
   // }
   news = new Map();
 
-  constructor(symbol, percentChange) {
+  constructor(symbol, percentChange, price) {
     this.symbol = symbol;
-    this.dayPercentChange = percentChange;
+    this.dayPercentChange = percentChange.toFixed(2);
+    this.lastPrice = price;
   }
 }
 

@@ -5,22 +5,22 @@ import Stock from "./stock.js";
 dotevn.config({ path: "../.env" });
 
 const newsBot = {
-  polygonBaseURL: process.env.POLYGON_BASE_URL, // Polygon.io base url
-  polygonAPIKey: process.env.POLYGON_API_KEY, // Polygon.io API key
-  alpacaAPIKey: process.env.ALPACA_PAPER_API_KEY, // Polygon.io base url
-  alpacaSecret: process.env.ALPACA_SECRET_API_KEY, // Polygon.io API key
-  relevantDate: 7, // Number of days that passed of relevant news article
-  nameToSymbol: new Map(), // Maps name of stock to its symbol
+  POLYGON_BASE_URL: process.env.POLYGON_BASE_URL, // Polygon.io base url
+  POLYGON_API_KEY: process.env.POLYGON_API_KEY, // Polygon.io API key
+  ALPACA_API_KEY: process.env.ALPACA_PAPER_API_KEY, // Polygon.io base url
+  ALPACA_SECRET: process.env.ALPACA_SECRET_API_KEY, // Polygon.io API key
+  RELEVANT_DATE: 3, // Number of days that passed of relevant news article
+  ENABLE_POLYGON_API: true, // Make or not make API calls to Polygon.io
 
   //Port for sentiment analysis API
-  sentimentAnalysisPort: process.env.SENTIMENT_ANALYSIS_PORT,
+  SENTIMENT_ANALYSIS_PORT: process.env.SENTIMENT_ANALYSIS_PORT,
 
   // Number of articles to receive per API call to Polygon.io and
   // Alpaca for stock news
-  articleLimitPerCall: 50,
+  ARTICLE_LIMIT_PER_CALL: 50,
 
   // Number of stocks per API request to Alpaca for news
-  stocksPerRequestBatch: 20,
+  STOCK_PER_REQUEST_PATCH: 60,
 
   // All stocks, as a Stock object in the stock market with percent
   // change within [returnLowerBound, returnHigherBound].
@@ -53,7 +53,7 @@ const newsBot = {
     const diff = now.getTime() - targetDate.getTime();
     const diffInDays = diff / (1000 * 60 * 60 * 24);
 
-    return diffInDays <= this.relevantDate;
+    return diffInDays <= this.RELEVANT_DATE;
   },
 
   //------------------------------------------------------------------------
@@ -64,8 +64,8 @@ const newsBot = {
   // upperBound: Higher bound of stock price change for 1 day
   //------------------------------------------------------------------------
   async fillStocksList(lowerBound, upperBound) {
-    let queryURL = `${this.polygonBaseURL}/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=${this.polygonAPIKey}`;
-    // let queryURL = `${this.polygonBaseURL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=KULR&apiKey=${this.polygonAPIKey}`;
+    let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=${this.POLYGON_API_KEY}`;
+    // let queryURL = `${this.polygonBaseURL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=HOLO&apiKey=${this.polygonAPIKey}`;
 
     console.log(lowerBound, upperBound);
     try {
@@ -74,8 +74,9 @@ const newsBot = {
 
       allStocks.forEach((s) => {
         let percentChange = s.todaysChangePerc;
+        let lastMarketPrice = s.min.c;
         if (lowerBound < percentChange && percentChange < upperBound) {
-          let stock = new Stock(s.ticker, percentChange);
+          let stock = new Stock(s.ticker, percentChange, lastMarketPrice);
           this.stocks.set(s.ticker, stock);
         }
       });
@@ -90,52 +91,56 @@ const newsBot = {
   //------------------------------------------------------------------------
   async fillStockNews() {
     // Populate news using Polygon.io API
-    console.log("Requesting news from Polygon.io... this may take a bit...");
-    for (const [key, value] of this.stocks) {
-      try {
-        // use ".gte" after "utc" for articles on and after the date or ".lte" for on and before
-        let queryURL = `${this.polygonBaseURL}/v2/reference/news?ticker=${key}&order=desc&limit=${this.articleLimitPerCall}&sort=published_utc&apiKey=${this.polygonAPIKey}`;
-        const response = await axios.get(queryURL);
-        const news = response.data;
+    // TODO: could put this in a promise to get news without blocking and update
+    // front end later
+    if (this.ENABLE_POLYGON_API) {
+      console.log("Requesting news from Polygon.io... this may take a bit...");
+      for (const [key, value] of this.stocks) {
+        try {
+          // use ".gte" after "utc" for articles on and after the date or ".lte" for on and before
+          let queryURL = `${this.POLYGON_BASE_URL}/v2/reference/news?ticker=${key}&order=desc&limit=${this.ARTICLE_LIMIT_PER_CALL}&sort=published_utc&apiKey=${this.POLYGON_API_KEY}`;
+          const response = await axios.get(queryURL);
+          const news = response.data;
 
-        news.results.forEach((newsArticle) => {
-          // Only add relevant news
-          if (this.withinRelevantTime(newsArticle.published_utc)) {
-            let newsMap = new Map();
-            newsMap.set("date", newsArticle.published_utc);
-            newsMap.set("title", newsArticle.title);
+          news.results.forEach((newsArticle) => {
+            // Only add relevant news
+            if (this.withinRelevantTime(newsArticle.published_utc)) {
+              let newsMap = new Map();
+              newsMap.set("date", newsArticle.published_utc);
+              newsMap.set("title", newsArticle.title);
 
-            // For Polygon.io, get the sentiment reasoning for this stock, if it
-            // exists, and add it to the description
-            let descr = newsArticle.description;
-            if (newsArticle.hasOwnProperty("insights")) {
-              newsArticle.insights.forEach((insight) => {
-                if (insight.ticker === key) {
-                  descr = descr.concat(" ").concat(insight.sentiment_reasoning);
-                }
-              });
+              // For Polygon.io, get the sentiment reasoning for this stock, if it
+              // exists, and add it to the description
+              let descr = newsArticle.description;
+              if (newsArticle.hasOwnProperty("insights")) {
+                newsArticle.insights.forEach((insight) => {
+                  if (insight.ticker === key) {
+                    descr = descr.concat(" ").concat(insight.sentiment_reasoning);
+                  }
+                });
+              }
+              newsMap.set("description", descr);
+              value.news.set(newsArticle.article_url, newsMap);
+              this.stocks.get(key).numNews += 1;
             }
-            newsMap.set("description", descr);
-            value.news.set(newsArticle.article_url, newsMap);
-            this.stocks.get(key).numNews += 1;
-          }
-        });
-      } catch (err) {
-        console.error("Error querying Polygon.io to get stock news", err);
+          });
+        } catch (err) {
+          console.error("Error querying Polygon.io to get stock news", err);
+        }
       }
     }
 
     // Find the date within relevant range
     let date = new Date();
-    let day = date.getDate() - this.relevantDate;
+    let day = date.getDate() - this.RELEVANT_DATE;
     date.setDate(day);
 
     // Populate news using Alpaca API
     console.log("Requesting news from Alpaca");
     let queryURL = "https://data.alpaca.markets/v1beta1/news";
     let headers = {
-      "APCA-API-KEY-ID": this.alpacaAPIKey,
-      "APCA-API-SECRET-KEY": this.alpacaSecret,
+      "APCA-API-KEY-ID": this.ALPACA_API_KEY,
+      "APCA-API-SECRET-KEY": this.ALPACA_SECRET,
     };
 
     let numStocks = 0; // Which "index" this loop is on
@@ -148,7 +153,7 @@ const newsBot = {
       stockBatch.push(key);
 
       // Send API calls in batches or if this is the last stock in the list
-      if (numStocks % this.stocksPerRequestBatch == 0 || numStocks == this.stocks.size) {
+      if (numStocks % this.STOCK_PER_REQUEST_PATCH == 0 || numStocks == this.stocks.size) {
         let symbols = stockBatch.join(",");
 
         console.log("Requesting news on batch:", symbols);
@@ -157,7 +162,7 @@ const newsBot = {
         let params = {
           symbols: symbols,
           start: date,
-          limit: this.articleLimitPerCall,
+          limit: this.ARTICLE_LIMIT_PER_CALL,
         };
 
         try {
@@ -179,6 +184,12 @@ const newsBot = {
                 // seems to be html code
                 newNews.set("description", newsArticle.summary);
 
+                // Populate the infomation of the stock
+                let mostRecent = this.stocks.get(ticker).newestNewsDate;
+                let currDate = new Date(newsArticle.created_at);
+                if (mostRecent === "" || mostRecent >= currDate) {
+                  this.stocks.get(ticker).newestNewsDate = currDate;
+                }
                 this.stocks.get(ticker).news.set(newsArticle.url, newNews);
                 this.stocks.get(ticker).numNews += 1;
               }
@@ -198,7 +209,7 @@ const newsBot = {
 
     console.log("**Alpaca has a limit of 50 articles per page**");
     console.log("This iteration:");
-    console.log("       Stocks per batch request:", this.stocksPerRequestBatch);
+    console.log("       Stocks per batch request:", this.STOCK_PER_REQUEST_PATCH);
     console.log("       Number of stocks:", numStocks);
     console.log("       Average articles per page:", articleCount / numBatchesSent);
     console.log("       Max articles per page:", maxArticles);
@@ -229,7 +240,7 @@ const newsBot = {
 
     let scores = [];
     try {
-      let queryURL = `http://localhost:${this.sentimentAnalysisPort}/analyze`;
+      let queryURL = `http://localhost:${this.SENTIMENT_ANALYSIS_PORT}/analyze`;
       const response = await axios.post(queryURL, newsToAnalyze);
       scores = response.data["analysis"];
     } catch (err) {
@@ -265,19 +276,13 @@ const newsBot = {
   },
 
   //------------------------------------------------------------------------
-  // Format the articles to be displayed on the front end
-  //------------------------------------------------------------------------
-  async prepareNews() {},
-
-  //------------------------------------------------------------------------
   // Get recommendations for what stocks to buy based on the news
   //------------------------------------------------------------------------
   async getStockSuggestions(lower, upper) {
-    await newsBot.fillStocksList(lower, upper);
-    await newsBot.fillStockNews();
-    await newsBot.getSentimentAnalysis();
-    await this.prepareNews();
-    return 0;
+    await this.fillStocksList(lower, upper);
+    await this.fillStockNews();
+    await this.getSentimentAnalysis();
+    return Array.from(this.stocks.values());
   },
 };
 

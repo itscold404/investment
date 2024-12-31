@@ -16,6 +16,8 @@ const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
 
 // TODO: remove this after testing. Should be called when front end decides
 // the range
+// await newsBot.fillStocksList(5, 10);
+// await newsBot.fillStockNews();
 
 //------------------------------------------------------------------------
 // Connection things
@@ -71,8 +73,8 @@ backend.post("/stockSuggestions", async (req, res) => {
   console.log("received button press");
   let lower = req.body.lowerBound;
   let upper = req.body.upperBound;
-  let thing = await newsBot.getStockSuggestions(lower, upper);
-  res.send("Success");
+  let stocks = await newsBot.getStockSuggestions(lower, upper);
+  res.json({ stocks: stocks });
 });
 
 backend.listen(BACKEND_PORT, () => {
