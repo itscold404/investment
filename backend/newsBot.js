@@ -1,10 +1,15 @@
 import axios from "axios";
 import dotevn from "dotenv";
 import Stock from "./stock.js";
+import https from "https";
+import fs from "fs";
 
 dotevn.config({ path: "../.env" });
 
 const newsBot = {
+  //------------------------------------------------------------------------
+  // Constants
+  //------------------------------------------------------------------------
   POLYGON_BASE_URL: process.env.POLYGON_BASE_URL, // Polygon.io base url
   POLYGON_API_KEY: process.env.POLYGON_API_KEY, // Polygon.io API key
   ALPACA_API_KEY: process.env.ALPACA_PAPER_API_KEY, // Polygon.io base url
@@ -65,7 +70,7 @@ const newsBot = {
   //------------------------------------------------------------------------
   async fillStocksList(lowerBound, upperBound) {
     let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=${this.POLYGON_API_KEY}`;
-    // let queryURL = `${this.polygonBaseURL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=HOLO&apiKey=${this.polygonAPIKey}`;
+    // let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=GOOG&apiKey=${this.POLYGON_API_KEY}`;
 
     console.log(lowerBound, upperBound);
     try {
@@ -240,8 +245,12 @@ const newsBot = {
 
     let scores = [];
     try {
-      let queryURL = `http://localhost:${this.SENTIMENT_ANALYSIS_PORT}/analyze`;
-      const response = await axios.post(queryURL, newsToAnalyze);
+      let queryURL = `https://localhost:${this.SENTIMENT_ANALYSIS_PORT}/analyze`;
+      const httpsAgent = new https.Agent({
+        ca: fs.readFileSync("../cert/cert.pem"),
+      });
+
+      const response = await axios.post(queryURL, newsToAnalyze, { httpsAgent });
       scores = response.data["analysis"];
     } catch (err) {
       console.error("Failed to get sentiment analysis:", err);

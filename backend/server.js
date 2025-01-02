@@ -3,21 +3,19 @@ import dotevn from "dotenv";
 import express from "express";
 import cors from "cors";
 import newsBot from "./newsBot.js";
+import https from "https";
+import fs from "fs";
 
 dotevn.config({ path: "../.env" });
 
 //------------------------------------------------------------------------
 // Constants and Globals
 //------------------------------------------------------------------------
+var isPaperTrading = true;
 const BACKEND_PORT = process.env.VITE_BACKEND_PORT;
 const FRONT_PORT = process.env.FRONT_END_PORT;
 const PAPER_API = process.env.ALPACA_PAPER_API_KEY;
 const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
-
-// TODO: remove this after testing. Should be called when front end decides
-// the range
-// await newsBot.fillStocksList(5, 10);
-// await newsBot.fillStockNews();
 
 //------------------------------------------------------------------------
 // Connection things
@@ -32,10 +30,23 @@ const backend = express();
 backend
   .use(
     cors({
-      origin: `http://localhost:${FRONT_PORT}`, // Only talk to this port
+      origin: `https://localhost:${FRONT_PORT}`, // Only talk to this port
     })
   )
   .use(express.json());
+
+const httpsAgent = new https.Agent({
+  ca: fs.readFileSync("../cert/cert.pem"),
+});
+
+let options = {
+  key: fs.readFileSync("../cert/key.pem"),
+  cert: fs.readFileSync("../cert/cert.pem"),
+};
+
+https.createServer(options, backend).listen(BACKEND_PORT, () => {
+  console.log(`Server running on https://localhost:${BACKEND_PORT}`);
+});
 
 //------------------------------------------------------------------------
 // Translate error messages to be user understandable
@@ -55,8 +66,12 @@ function translate_error(err) {
 //------------------------------------------------------------------------
 backend.get("/test/printAccount", async (req, res) => {
   try {
-    const account = await alpacaPaper.getAccount();
-    console.log(account);
+    if (isPaperTrading) {
+      const account = await alpacaPaper.getAccount();
+      console.log(account);
+    } else {
+      // TODO: set up non-paper trading
+    }
     console.log("*******************************");
     console.log("*** SERVER CONNECTION VALID ***");
     console.log("*******************************");
@@ -75,8 +90,4 @@ backend.post("/stockSuggestions", async (req, res) => {
   let upper = req.body.upperBound;
   let stocks = await newsBot.getStockSuggestions(lower, upper);
   res.json({ stocks: stocks });
-});
-
-backend.listen(BACKEND_PORT, () => {
-  console.log(`Server running on http://localhost:${BACKEND_PORT}`);
 });

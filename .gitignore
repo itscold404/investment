@@ -1,6 +1,10 @@
 # environment file
 .env
 
+# Keys and Certs
+key.pem
+cert.pem
+
 # venv
 venv
 

@@ -29,7 +29,6 @@ finbert_sentiment_pipeline = pipeline(
     "sentiment-analysis", model="yiyanghkust/finbert-tone", device=0
 )
 
-
 # ------------------------------------------------------------------------
 # Perform sentiment Analysis all news on the stocks in parallel
 # ------------------------------------------------------------------------
@@ -70,4 +69,4 @@ def analyze():
 
 
 if __name__ == "__main__":
-    app.run(port=REQUEST_PORT)
+    app.run(port=REQUEST_PORT, ssl_context=('../cert/cert.pem', '../cert/key.pem'))

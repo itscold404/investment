@@ -119,12 +119,13 @@ export default {
       this.receivedData = false;
       this.receivedError = false;
 
+      let param = { lowerBound: this.lowerBound, upperBound: this.upperBound };
       try {
         console.log(this.loading, this.receivedData);
-        const response = await axios.post(`http://localhost:${backend_port}/stockSuggestions`, {
-          lowerBound: this.lowerBound,
-          upperBound: this.upperBound,
-        });
+        const response = await axios.post(
+          `https://localhost:${backend_port}/stockSuggestions`,
+          param
+        );
         this.stocks = response.data["stocks"];
 
         console.log(this.stocks);

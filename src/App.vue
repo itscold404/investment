@@ -9,8 +9,10 @@
 </template>
 
 <script>
-const backend_port = import.meta.env.VITE_BACKEND_PORT;
 import axios from "axios";
+
+const backend_port = import.meta.env.VITE_BACKEND_PORT;
+
 export default {
   data() {
     return {
@@ -19,9 +21,10 @@ export default {
   },
   async mounted() {
     try {
-      await axios.get(`http://localhost:${backend_port}/test/printAccount`);
+      await axios.get(`https://localhost:${backend_port}/test/printAccount`);
     } catch (err) {
       this.receivedError = true;
+      console.log(err);
     }
   },
 };
