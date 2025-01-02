@@ -70,7 +70,7 @@ const newsBot = {
   //------------------------------------------------------------------------
   async fillStocksList(lowerBound, upperBound) {
     let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=${this.POLYGON_API_KEY}`;
-    // let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=GOOG&apiKey=${this.POLYGON_API_KEY}`;
+    // let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=PAYC&apiKey=${this.POLYGON_API_KEY}`;
 
     console.log(lowerBound, upperBound);
     try {

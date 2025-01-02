@@ -49,7 +49,7 @@
 
         <div v-for="(stock, index) in sortedStocks" :key="stock.symbol" class="stock-item">
           <div class="stock-summary" @click="toggleStock(index)">
-            {{ stock.symbol }} -- Price:${{ stock.dayPercentChange }}, 1D Change:
+            {{ stock.symbol }} -- Price:${{ stock.lastPrice }}, 1D Change:
             {{ stock.dayPercentChange }}%, Average Sentiment: {{ stock.sentScore }}
           </div>
 
