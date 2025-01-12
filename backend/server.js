@@ -17,6 +17,7 @@ const FRONT_PORT = process.env.FRONT_END_PORT;
 const PAPER_API = process.env.ALPACA_PAPER_API_KEY;
 const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
 
+newsBot.startRSSFeedListening();
 //------------------------------------------------------------------------
 // Connection things
 //------------------------------------------------------------------------
@@ -85,9 +86,15 @@ backend.get("/test/printAccount", async (req, res) => {
 // Stock suggestion page functions
 //------------------------------------------------------------------------
 backend.post("/stockSuggestions", async (req, res) => {
-  console.log("received button press");
   let lower = req.body.lowerBound;
   let upper = req.body.upperBound;
   let stocks = await newsBot.getStockSuggestions(lower, upper);
   res.json({ stocks: stocks });
 });
+
+// //------------------------------------------------------------------------
+// // Start listening to RSS Feeds
+// //------------------------------------------------------------------------
+// backend.post("/startRSSFeed", async (req, res) => {
+
+// });

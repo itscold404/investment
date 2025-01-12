@@ -3,22 +3,23 @@ import dotevn from "dotenv";
 import Stock from "./stock.js";
 import https from "https";
 import fs from "fs";
+import Parser from "rss-parser";
 
 dotevn.config({ path: "../.env" });
 
 const newsBot = {
   //------------------------------------------------------------------------
-  // Constants
+  // Constants and global variables
   //------------------------------------------------------------------------
   POLYGON_BASE_URL: process.env.POLYGON_BASE_URL, // Polygon.io base url
   POLYGON_API_KEY: process.env.POLYGON_API_KEY, // Polygon.io API key
   ALPACA_API_KEY: process.env.ALPACA_PAPER_API_KEY, // Polygon.io base url
   ALPACA_SECRET: process.env.ALPACA_SECRET_API_KEY, // Polygon.io API key
-  RELEVANT_DATE: 1, // Number of days that passed of relevant news article
+  RELEVANT_DATE: 7, // Number of days that passed of relevant news article
   ENABLE_POLYGON_API: false, // Make or not make API calls to Polygon.io
 
   //Port for sentiment analysis API
-  SENTIMENT_ANALYSIS_PORT: process.env.SENTIMENT_ANALYSIS_PORT,
+  ML_PORT: process.env.ML_PORT,
 
   // Number of articles to receive per API call to Polygon.io and
   // Alpaca for stock news
@@ -27,10 +28,29 @@ const newsBot = {
   // Number of stocks per API request to Alpaca for news
   STOCK_PER_REQUEST_PATCH: 60,
 
+  // Cert for HTTPS communication
+  HTTPS_AGENT: new https.Agent({
+    ca: fs.readFileSync("../cert/cert.pem"),
+  }),
+
   // All stocks, as a Stock object in the stock market with percent
   // change within [returnLowerBound, returnHigherBound].
   // This hashmap is formatted: {stock_symbol: Stock}
   stocks: new Map(),
+
+  // RSS feed parser
+  rssParser: new Parser(),
+
+  // All URL's to listen for RSS feeds
+  rssFeedURLs: [
+    "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+    "https://www.investing.com/rss/news.rss",
+    "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
+    "https://seekingalpha.com/market_currents.xml",
+  ],
+
+  // All news gathered from RSS feeds as this bot is running
+  rssFeedNews: [],
 
   //------------------------------------------------------------------------
   // Sorts the list of stocks in decending 1 day percent change
@@ -245,12 +265,9 @@ const newsBot = {
 
     let scores = [];
     try {
-      let queryURL = `https://localhost:${this.SENTIMENT_ANALYSIS_PORT}/analyze`;
-      const httpsAgent = new https.Agent({
-        ca: fs.readFileSync("../cert/cert.pem"),
-      });
+      let queryURL = `https://localhost:${this.ML_PORT}/analyze`;
 
-      const response = await axios.post(queryURL, newsToAnalyze, { httpsAgent });
+      const response = await axios.post(queryURL, newsToAnalyze, { httpsAgent: this.HTTPS_AGENT });
       scores = response.data["analysis"];
     } catch (err) {
       console.error("Failed to get sentiment analysis:", err);
@@ -292,6 +309,47 @@ const newsBot = {
     await this.fillStockNews();
     await this.getSentimentAnalysis();
     return Array.from(this.stocks.values());
+  },
+
+  //------------------------------------------------------------------------
+  // Start listening to RSS feeds for market news
+  //------------------------------------------------------------------------
+  async startRSSFeedListening() {
+    for (const url of this.rssFeedURLs) {
+      try {
+        const feed = await this.rssParser.parseURL(url);
+        // console.log("Title:", feed.title);
+
+        // feed.items.forEach((item) => {
+        //   console.log("Title:", item.title);
+        //   console.log("Link:", item.link);
+        // });
+      } catch (err) {
+        console.error("Error with receiving data from RSS feed: ", err);
+      }
+    }
+
+    try {
+      let queryURL = `https://localhost:${this.ML_PORT}/findOrgs`;
+
+      let payload = [
+        "Apple is looking at buying U.K. startup for $1 billion.",
+        "Apple and Tesla stocks surge as earnings exceed expectations.",
+        "Microsoft and Google have been investing heavily in artificial intelligence.",
+        "Meanwhile, OpenAI has been a major player in developing language models.",
+        "Companies like Amazon, Facebook, and IBM are also competing in this space.",
+        "In the financial sector, Goldman Sachs and JPMorgan Chase continue to lead.",
+        "Non-profits such as the World Health Organization (WHO) and the Red Cross are addressing global challenges.",
+        "Universities like MIT, Stanford University, and Harvard are partnering with tech companies to advance research.",
+        "In the entertainment industry, Netflix and Disney are launching new streaming services.",
+        "Startups such as SpaceX and Neuralink, founded by Elon Musk, are disrupting traditional industries.",
+      ];
+      const response = await axios.post(queryURL, payload, { httpsAgent: this.HTTPS_AGENT });
+      let orgs = response.data["orgs"];
+      console.log(orgs);
+    } catch (err) {
+      console.error("Failed to get list of organizations from ML.py:", err);
+    }
   },
 };
 
