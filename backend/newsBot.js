@@ -15,7 +15,7 @@ const newsBot = {
   POLYGON_API_KEY: process.env.POLYGON_API_KEY, // Polygon.io API key
   ALPACA_API_KEY: process.env.ALPACA_PAPER_API_KEY, // Polygon.io base url
   ALPACA_SECRET: process.env.ALPACA_SECRET_API_KEY, // Polygon.io API key
-  RELEVANT_DATE: 7, // Number of days that passed of relevant news article
+  RELEVANT_DATE: 4, // Number of days that passed of relevant news article
   ENABLE_POLYGON_API: false, // Make or not make API calls to Polygon.io
 
   //Port for sentiment analysis API
@@ -35,18 +35,31 @@ const newsBot = {
 
   // All stocks, as a Stock object in the stock market with percent
   // change within [returnLowerBound, returnHigherBound].
-  // This hashmap is formatted: {stock_symbol: Stock}
+  // This hashmap is formatted: {"stock_symbol": Stock}
   stocks: new Map(),
+
+  // Map of long name of stocks to their ticket symbol
+  longNameToSymbol: new Map(),
 
   // RSS feed parser
   rssParser: new Parser(),
 
   // All URL's to listen for RSS feeds
   rssFeedURLs: [
-    "https://feeds.content.dowjones.io/public/rss/mw_topstories",
-    "https://www.investing.com/rss/news.rss",
-    "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
-    "https://seekingalpha.com/market_currents.xml",
+    // "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+    // "https://www.investing.com/rss/news.rss",
+    // "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
+    // "https://seekingalpha.com/market_currents.xml",
+    // "https://feeds.content.dowjones.io/public/rss/mw_marketpulse",
+    // "https://www.globenewswire.com/RssFeed/subjectcode/27-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions",
+    // "https://www.globenewswire.com/RssFeed/orgclass/1/feedTitle/GlobeNewswire%20-%20News%20about%20Public%20Companies",
+    // "https://www.globenewswire.com/RssFeed/subjectcode/12-Dividend%20Reports%20and%20Estimates/feedTitle/GlobeNewswire%20-%20Dividend%20Reports%20and%20Estimates",
+    "https://www.globenewswire.com/RssFeed/subjectcode/13-Earnings%20Releases%20and%20Operating%20Results/feedTitle/GlobeNewswire%20-%20Earnings%20Releases%20and%20Operating%20Results",
+    "https://www.globenewswire.com/RssFeed/subjectcode/12-Dividend%20Reports%20And%20Estimates/feedTitle/GlobeNewswire%20-%20Dividend%20Reports%20And%20Estimates",
+    "https://www.globenewswire.com/RssFeed/subjectcode/86-Management%20Changes/feedTitle/GlobeNewswire%20-%20Management%20Changes",
+    "https://www.globenewswire.com/RssFeed/subjectcode/21-Initial%20Public%20Offerings/feedTitle/GlobeNewswire%20-%20Initial%20Public%20Offerings",
+    "https://www.globenewswire.com/RssFeed/subjectcode/59-Major%20Shareholder%20Announcements/feedTitle/GlobeNewswire%20-%20Major%20Shareholder%20Announcements",
+    "https://www.globenewswire.com/RssFeed/subjectcode/10-Company%20Regulatory%20Filings/feedTitle/GlobeNewswire%20-%20Company%20Regulatory%20Filings",
   ],
 
   // All news gathered from RSS feeds as this bot is running
@@ -315,15 +328,20 @@ const newsBot = {
   // Start listening to RSS feeds for market news
   //------------------------------------------------------------------------
   async startRSSFeedListening() {
+    let texts = [];
     for (const url of this.rssFeedURLs) {
       try {
         const feed = await this.rssParser.parseURL(url);
-        // console.log("Title:", feed.title);
+        console.log("Title:", feed.title);
 
-        // feed.items.forEach((item) => {
-        //   console.log("Title:", item.title);
-        //   console.log("Link:", item.link);
-        // });
+        feed.items.forEach((item) => {
+          texts.push(item.title);
+          console.log("===================================");
+          console.log("Title:", item.title); // pass this to grab org name
+          console.log("pubDate:", item.pubDate); // want within 30 minutes
+          console.log("Link:", item.link);
+          console.log("language:", item.language); // want only en language
+        });
       } catch (err) {
         console.error("Error with receiving data from RSS feed: ", err);
       }
@@ -331,20 +349,7 @@ const newsBot = {
 
     try {
       let queryURL = `https://localhost:${this.ML_PORT}/findOrgs`;
-
-      let payload = [
-        "Apple is looking at buying U.K. startup for $1 billion.",
-        "Apple and Tesla stocks surge as earnings exceed expectations.",
-        "Microsoft and Google have been investing heavily in artificial intelligence.",
-        "Meanwhile, OpenAI has been a major player in developing language models.",
-        "Companies like Amazon, Facebook, and IBM are also competing in this space.",
-        "In the financial sector, Goldman Sachs and JPMorgan Chase continue to lead.",
-        "Non-profits such as the World Health Organization (WHO) and the Red Cross are addressing global challenges.",
-        "Universities like MIT, Stanford University, and Harvard are partnering with tech companies to advance research.",
-        "In the entertainment industry, Netflix and Disney are launching new streaming services.",
-        "Startups such as SpaceX and Neuralink, founded by Elon Musk, are disrupting traditional industries.",
-      ];
-      const response = await axios.post(queryURL, payload, { httpsAgent: this.HTTPS_AGENT });
+      const response = await axios.post(queryURL, texts, { httpsAgent: this.HTTPS_AGENT });
       let orgs = response.data["orgs"];
       console.log(orgs);
     } catch (err) {
