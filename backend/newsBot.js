@@ -1,3 +1,4 @@
+import rssFeedURLs from "../data/rss_URLs.js";
 import axios from "axios";
 import dotevn from "dotenv";
 import Stock from "./stock.js";
@@ -15,7 +16,7 @@ const newsBot = {
   POLYGON_API_KEY: process.env.POLYGON_API_KEY, // Polygon.io API key
   ALPACA_API_KEY: process.env.ALPACA_PAPER_API_KEY, // Polygon.io base url
   ALPACA_SECRET: process.env.ALPACA_SECRET_API_KEY, // Polygon.io API key
-  RELEVANT_DATE: 4, // Number of days that passed of relevant news article
+  RELEVANT_DATE: 1, // Number of days that passed of relevant news article
   ENABLE_POLYGON_API: false, // Make or not make API calls to Polygon.io
 
   //Port for sentiment analysis API
@@ -45,22 +46,7 @@ const newsBot = {
   rssParser: new Parser(),
 
   // All URL's to listen for RSS feeds
-  rssFeedURLs: [
-    // "https://feeds.content.dowjones.io/public/rss/mw_topstories",
-    // "https://www.investing.com/rss/news.rss",
-    // "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
-    // "https://seekingalpha.com/market_currents.xml",
-    // "https://feeds.content.dowjones.io/public/rss/mw_marketpulse",
-    // "https://www.globenewswire.com/RssFeed/subjectcode/27-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions",
-    // "https://www.globenewswire.com/RssFeed/orgclass/1/feedTitle/GlobeNewswire%20-%20News%20about%20Public%20Companies",
-    // "https://www.globenewswire.com/RssFeed/subjectcode/12-Dividend%20Reports%20and%20Estimates/feedTitle/GlobeNewswire%20-%20Dividend%20Reports%20and%20Estimates",
-    "https://www.globenewswire.com/RssFeed/subjectcode/13-Earnings%20Releases%20and%20Operating%20Results/feedTitle/GlobeNewswire%20-%20Earnings%20Releases%20and%20Operating%20Results",
-    "https://www.globenewswire.com/RssFeed/subjectcode/12-Dividend%20Reports%20And%20Estimates/feedTitle/GlobeNewswire%20-%20Dividend%20Reports%20And%20Estimates",
-    "https://www.globenewswire.com/RssFeed/subjectcode/86-Management%20Changes/feedTitle/GlobeNewswire%20-%20Management%20Changes",
-    "https://www.globenewswire.com/RssFeed/subjectcode/21-Initial%20Public%20Offerings/feedTitle/GlobeNewswire%20-%20Initial%20Public%20Offerings",
-    "https://www.globenewswire.com/RssFeed/subjectcode/59-Major%20Shareholder%20Announcements/feedTitle/GlobeNewswire%20-%20Major%20Shareholder%20Announcements",
-    "https://www.globenewswire.com/RssFeed/subjectcode/10-Company%20Regulatory%20Filings/feedTitle/GlobeNewswire%20-%20Company%20Regulatory%20Filings",
-  ],
+  rssFeedURLs: rssFeedURLs,
 
   // All news gathered from RSS feeds as this bot is running
   rssFeedNews: [],
