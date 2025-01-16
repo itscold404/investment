@@ -92,8 +92,7 @@ const newsBot = {
       this.fetchRSS();
     }, this.RSS_REFRESH * 60 * 1000);
 
-    // Set up so that ML api call gets made to fetch orgs form news ever 10 seconds
-    // let processed = await this.findOrgs(texts);
+    // Process rawNews and add to todayStockSet every 10 seconds
     const SECONDS = 10;
     setInterval(async () => {
       this.processRawNews();
@@ -513,7 +512,7 @@ const newsBot = {
     try {
       let orgs = await this.findOrgs(this.rawNews);
       console.log("getting orgs", orgs);
-      // populate todayStockSet with the orgs after filtering them
+      // TODO: populate todayStockSet with the orgs after filtering them
       this.rawNews = [];
     } finally {
       relaseFunc();
