@@ -1,8 +1,6 @@
 const rssFeedURLs = [
-  "https://feeds.content.dowjones.io/public/rss/mw_topstories",
   "https://www.investing.com/rss/news.rss",
   "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
-  "https://seekingalpha.com/market_currents.xml",
   "https://feeds.content.dowjones.io/public/rss/mw_marketpulse",
   "https://www.globenewswire.com/RssFeed/subjectcode/27-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions",
   "https://www.globenewswire.com/RssFeed/orgclass/1/feedTitle/GlobeNewswire%20-%20News%20about%20Public%20Companies",

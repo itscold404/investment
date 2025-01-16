@@ -5,6 +5,7 @@ import Stock from "./stock.js";
 import https from "https";
 import fs from "fs";
 import Parser from "rss-parser";
+import { Mutex } from "async-mutex";
 
 dotevn.config({ path: "../.env" });
 
@@ -18,9 +19,11 @@ const newsBot = {
   ALPACA_SECRET: process.env.ALPACA_SECRET_API_KEY, // Polygon.io API key
   RELEVANT_DATE: 1, // Number of days that passed of relevant news article
   ENABLE_POLYGON_API: false, // Make or not make API calls to Polygon.io
+  ML_PORT: process.env.ML_PORT, //Port for sentiment analysis API
+  RSS_REFRESH: 10, // How often to fetch from RSS feed. Default 10
 
-  //Port for sentiment analysis API
-  ML_PORT: process.env.ML_PORT,
+  // Number of news in liveNews before removing old news
+  LIVE_NEWS_ARRAY_LIMIT: 100,
 
   // Number of articles to receive per API call to Polygon.io and
   // Alpaca for stock news
@@ -49,29 +52,51 @@ const newsBot = {
   rssFeedURLs: rssFeedURLs,
 
   // All news gathered from RSS feeds as this bot is running
-  rssFeedNews: [],
+  // Elements should be {title: "title", url: "url"}
+  liveNews: [],
+
+  // Set of stocks from todays news
+  todayStockSet: new Set(),
+
+  // Mutex used to add to liveNews array
+  newsMutex: new Mutex(),
 
   //------------------------------------------------------------------------
-  // Sorts the list of stocks in decending 1 day percent change
+  // Initialize the bot
+  // int rssRefresh: How often to fetch from RSS feeds
   //------------------------------------------------------------------------
-  sortStockDescending(list) {
-    // let sorted = list.sort((a, b) => b.dayPercentChange - a.dayPercentChange);
-    // return sorted;
+  init_bot(rssRefresh) {
+    this.RSS_REFRESH = rssRefresh;
+    return newsBot;
   },
 
   //------------------------------------------------------------------------
-  // Sorts the list of stocks in decending 1 day percent change
+  // Add news from RSS feeds and Alpaca websocket (live news) with mutex to
+  // the BEGINNING of liveNews array.
+  // string newsTitle: Title of the article
+  // string url: URL of the article
   //------------------------------------------------------------------------
-  sortStockAscending(list) {
-    // let sorted = list.sort((a, b) => a.dayPercentChange - b.dayPercentChange);
-    // return sorted;
+  async addNews(newsTitle, url) {
+    let newsToAdd = { title: newsTitle, url: url };
+    const relaseFunc = await this.newsMutex.acquire();
+
+    try {
+      this.liveNews.unshift(newsToAdd);
+
+      if (this.liveNews.length > this.LIVE_NEWS_ARRAY_LIMIT) {
+        this.liveNews.pop();
+      }
+    } finally {
+      relaseFunc();
+    }
   },
 
   //------------------------------------------------------------------------
   // Check if the UTC date is within the Time specified
-  // utcDate: the UTC Date as a string (ex. 2024-05-10T20:15:00Z)
+  // String utcDate: the UTC Date as a string (ex. 2024-05-10T20:15:00Z)
+  // return true if the UTC date is within. false otherwise
   //------------------------------------------------------------------------
-  withinRelevantTime(utcDate) {
+  withinRelevantDate(utcDate) {
     const now = new Date();
     const targetDate = new Date(utcDate);
     const diff = now.getTime() - targetDate.getTime();
@@ -81,11 +106,30 @@ const newsBot = {
   },
 
   //------------------------------------------------------------------------
+  // Check if the RSS feed news should be added depending on its publishing
+  // date and time
+  // Date pubDate: the UTC Date
+  // return true if it should be added. false otherwise
+  //------------------------------------------------------------------------
+  shouldAddRssFeed(pubDate) {
+    // If pubDate is older than currtime - RSS_REFRESH, then we know that
+    // this news from the rss feed has already been seen/processed
+    const now = new Date();
+
+    const refresh = this.RSS_REFRESH * 60 * 1000;
+    // const refresh = 1440 * 60 * 1000; // TODO: remove when finished testing
+
+    let timeDiff = now.getTime() - pubDate;
+
+    return timeDiff <= refresh;
+  },
+
+  //------------------------------------------------------------------------
   // Populate the list of stocks with percent change of
   // [lowerBound, upperBound]
   //
-  // lowerBound: Lower bound of stock price change for 1 day
-  // upperBound: Higher bound of stock price change for 1 day
+  // int lowerBound: Lower bound of stock price change for 1 day
+  // int upperBound: Higher bound of stock price change for 1 day
   //------------------------------------------------------------------------
   async fillStocksList(lowerBound, upperBound) {
     let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=${this.POLYGON_API_KEY}`;
@@ -128,7 +172,7 @@ const newsBot = {
 
           news.results.forEach((newsArticle) => {
             // Only add relevant news
-            if (this.withinRelevantTime(newsArticle.published_utc)) {
+            if (this.withinRelevantDate(newsArticle.published_utc)) {
               let newsMap = new Map();
               newsMap.set("date", newsArticle.published_utc);
               newsMap.set("title", newsArticle.title);
@@ -302,6 +346,8 @@ const newsBot = {
 
   //------------------------------------------------------------------------
   // Get recommendations for what stocks to buy based on the news
+  // int lower: lower bounds as a percent
+  // int upper: upperbound as a percent
   //------------------------------------------------------------------------
   async getStockSuggestions(lower, upper) {
     await this.fillStocksList(lower, upper);
@@ -311,26 +357,34 @@ const newsBot = {
   },
 
   //------------------------------------------------------------------------
-  // Start listening to RSS feeds for market news
+  // Fetch news from RSS. Populate
   //------------------------------------------------------------------------
-  async startRSSFeedListening() {
+  async fetchRSS() {
+    console.log(this.liveNews.length);
     let texts = [];
-    for (const url of this.rssFeedURLs) {
-      try {
-        const feed = await this.rssParser.parseURL(url);
-        console.log("Title:", feed.title);
+    try {
+      const feedPromises = this.rssFeedURLs.map((url) => this.rssParser.parseURL(url));
+      const feeds = await Promise.all(feedPromises);
 
-        feed.items.forEach((item) => {
-          texts.push(item.title);
-          console.log("===================================");
-          console.log("Title:", item.title); // pass this to grab org name
-          console.log("pubDate:", item.pubDate); // want within 30 minutes
-          console.log("Link:", item.link);
-          console.log("language:", item.language); // want only en language
-        });
-      } catch (err) {
-        console.error("Error with receiving data from RSS feed: ", err);
+      for (const feed of feeds) {
+        try {
+          // Just grab the newest from the feed as feeds do not update requently
+          // enough
+          let newest = feed["items"][0];
+          let pubDate = new Date(newest["pubDate"]);
+
+          if (this.shouldAddRssFeed(pubDate)) {
+            let url = newest["link"];
+            let title = newest["title"];
+            texts.push(title);
+            await this.addNews(title, url);
+          }
+        } catch (err) {
+          console.error("Error with processing RSS feed data: ", err);
+        }
       }
+    } catch (err) {
+      console.error("Error with receiving data from RSS feed: ", err);
     }
 
     try {

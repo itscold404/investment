@@ -1,7 +1,7 @@
 import os
 import spacy
 from transformers import pipeline
-from flask import Flask, request, jsonify
+from flask import Flask, request
 from dotenv import load_dotenv
 import torch
 
@@ -21,14 +21,12 @@ if PROCESSOR == 0:
     spacy.require_gpu()
 
 # Load spaCy's English model. Disable components not used for recognizing
-# names of organizations
-#
+# names of organizations.
 # Small, medium, large models: en_core_web_sm, en_core_web_md, en_core_web_lg
 nlp = spacy.load(
     "en_core_web_lg", disable=["parser", "tagger", "lemmatizer", "attribute_ruler"]
 )
 
-# finbert_NER = pipeline("ner", model="dslim/bert-base-NER")
 finbert_sentiment_pipeline = pipeline(
     "sentiment-analysis", model="yiyanghkust/finbert-tone", device=0
 )
@@ -53,7 +51,6 @@ def analyze():
             results = finbert_sentiment_pipeline(data, batch_size=BATCH_SIZE)
 
             for value in results:
-                print(value)
                 label, score = value["label"], value["score"]
                 determination = 0
 

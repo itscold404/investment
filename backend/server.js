@@ -17,9 +17,8 @@ const FRONT_PORT = process.env.FRONT_END_PORT;
 const PAPER_API = process.env.ALPACA_PAPER_API_KEY;
 const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
 
-newsBot.startRSSFeedListening();
 //------------------------------------------------------------------------
-// Connection things
+// Setup and connections
 //------------------------------------------------------------------------
 const alpacaPaper = new Alpaca({
   keyId: PAPER_API,
@@ -36,10 +35,6 @@ backend
   )
   .use(express.json());
 
-const httpsAgent = new https.Agent({
-  ca: fs.readFileSync("../cert/cert.pem"),
-});
-
 let options = {
   key: fs.readFileSync("../cert/key.pem"),
   cert: fs.readFileSync("../cert/cert.pem"),
@@ -48,6 +43,18 @@ let options = {
 https.createServer(options, backend).listen(BACKEND_PORT, () => {
   console.log(`Server running on https://localhost:${BACKEND_PORT}`);
 });
+
+// Initialize the newsBot
+const FEED_REFRESH_IN_MINUTES = 7;
+// const FEED_REFRESH_IN_MINUTES = 0.1; // remove after testing
+var nb = newsBot.init_bot(FEED_REFRESH_IN_MINUTES);
+
+// Get news through RSS Feeds every 7 minutes, but make a call on
+// program startup
+nb.fetchRSS();
+setInterval(async () => {
+  nb.fetchRSS();
+}, FEED_REFRESH_IN_MINUTES * 60 * 1000);
 
 //------------------------------------------------------------------------
 // Translate error messages to be user understandable
@@ -88,13 +95,6 @@ backend.get("/test/printAccount", async (req, res) => {
 backend.post("/stockSuggestions", async (req, res) => {
   let lower = req.body.lowerBound;
   let upper = req.body.upperBound;
-  let stocks = await newsBot.getStockSuggestions(lower, upper);
+  let stocks = await nb.getStockSuggestions(lower, upper);
   res.json({ stocks: stocks });
 });
-
-// //------------------------------------------------------------------------
-// // Start listening to RSS Feeds
-// //------------------------------------------------------------------------
-// backend.post("/startRSSFeed", async (req, res) => {
-
-// });
