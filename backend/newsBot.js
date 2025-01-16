@@ -5,6 +5,7 @@ import Stock from "./stock.js";
 import https from "https";
 import fs from "fs";
 import Parser from "rss-parser";
+import WebSocket from "ws";
 import { Mutex } from "async-mutex";
 
 dotevn.config({ path: "../.env" });
@@ -20,7 +21,15 @@ const newsBot = {
   RELEVANT_DATE: 1, // Number of days that passed of relevant news article
   ENABLE_POLYGON_API: false, // Make or not make API calls to Polygon.io
   ML_PORT: process.env.ML_PORT, //Port for sentiment analysis API
-  RSS_REFRESH: 10, // How often to fetch from RSS feed. Default 10
+
+  // How often to fetch from RSS feed in seconds. Default 600 seconds
+  RSS_REFRESH: 600,
+
+  // URL for Alpaca's websocket news
+  ALPACA_WEBSOCKET_NEWS_URL: "wss://stream.data.alpaca.markets/v1beta1/news",
+
+  // URL for Alpaca's websocket news
+  ALPACA_WEBSOCKET_TEST_NEWS_URL: "wss://stream.data.sandbox.alpaca.markets/v1beta1/news",
 
   // Number of news in liveNews before removing old news
   LIVE_NEWS_ARRAY_LIMIT: 100,
@@ -51,15 +60,23 @@ const newsBot = {
   // All URL's to listen for RSS feeds
   rssFeedURLs: rssFeedURLs,
 
-  // All news gathered from RSS feeds as this bot is running
+  // All news gathered from RSS feeds as this bot is running. To be
+  // displayed to front-end.
   // Elements should be {title: "title", url: "url"}
   liveNews: [],
+
+  // News that need to be processed by fetching their organization name.
+  // Elements are ["title", ...]
+  rawNews: [],
 
   // Set of stocks from todays news
   todayStockSet: new Set(),
 
   // Mutex used to add to liveNews array
-  newsMutex: new Mutex(),
+  liveNewsMutex: new Mutex(),
+
+  // Mutex used to add to rawNews array
+  rawNewsMutex: new Mutex(),
 
   //------------------------------------------------------------------------
   // Initialize the bot
@@ -67,6 +84,23 @@ const newsBot = {
   //------------------------------------------------------------------------
   init_bot(rssRefresh) {
     this.RSS_REFRESH = rssRefresh;
+
+    // Get news through RSS Feeds every 7 minutes, but make a call on
+    // program startup
+    this.fetchRSS();
+    setInterval(async () => {
+      this.fetchRSS();
+    }, this.RSS_REFRESH * 60 * 1000);
+
+    // Set up so that ML api call gets made to fetch orgs form news ever 10 seconds
+    // let processed = await this.findOrgs(texts);
+    const SECONDS = 10;
+    setInterval(async () => {
+      this.processRawNews();
+    }, SECONDS * 1000);
+
+    // Start getting news from Alpaca websocket
+    this.listenAlpacaWebsocket();
     return newsBot;
   },
 
@@ -76,9 +110,9 @@ const newsBot = {
   // string newsTitle: Title of the article
   // string url: URL of the article
   //------------------------------------------------------------------------
-  async addNews(newsTitle, url) {
+  async addLiveNews(newsTitle, url) {
     let newsToAdd = { title: newsTitle, url: url };
-    const relaseFunc = await this.newsMutex.acquire();
+    const relaseFunc = await this.liveNewsMutex.acquire();
 
     try {
       this.liveNews.unshift(newsToAdd);
@@ -86,6 +120,21 @@ const newsBot = {
       if (this.liveNews.length > this.LIVE_NEWS_ARRAY_LIMIT) {
         this.liveNews.pop();
       }
+    } finally {
+      relaseFunc();
+    }
+  },
+
+  //------------------------------------------------------------------------
+  // Add news from RSS feeds and Alpaca websocket (live news) with mutex to
+  // the rawNews array.
+  // string newsTitle: Title of the article
+  //------------------------------------------------------------------------
+  async addRawNews(newsTitle) {
+    const relaseFunc = await this.rawNewsMutex.acquire();
+
+    try {
+      this.rawNews.push(newsTitle);
     } finally {
       relaseFunc();
     }
@@ -122,6 +171,24 @@ const newsBot = {
     let timeDiff = now.getTime() - pubDate;
 
     return timeDiff <= refresh;
+  },
+
+  //------------------------------------------------------------------------
+  // Find the organizations within an array of text
+  // array texts: array of strings to search for organizations
+  // return the list of organizations in the texts
+  //------------------------------------------------------------------------
+  async findOrgs(texts) {
+    try {
+      let queryURL = `https://localhost:${this.ML_PORT}/findOrgs`;
+      const response = await axios.post(queryURL, texts, { httpsAgent: this.HTTPS_AGENT });
+      let orgs = response.data["orgs"];
+      return orgs;
+    } catch (err) {
+      console.error("Failed to get list of organizations from ML.py:", err);
+    }
+
+    return [];
   },
 
   //------------------------------------------------------------------------
@@ -221,7 +288,7 @@ const newsBot = {
       stockBatch.push(key);
 
       // Send API calls in batches or if this is the last stock in the list
-      if (numStocks % this.STOCK_PER_REQUEST_PATCH == 0 || numStocks == this.stocks.size) {
+      if (numStocks % this.STOCK_PER_REQUEST_PATCH === 0 || numStocks === this.stocks.size) {
         let symbols = stockBatch.join(",");
 
         console.log("Requesting news on batch:", symbols);
@@ -357,16 +424,16 @@ const newsBot = {
   },
 
   //------------------------------------------------------------------------
-  // Fetch news from RSS. Populate
+  // Fetch news from RSS. Populate the array of live news
   //------------------------------------------------------------------------
   async fetchRSS() {
-    console.log(this.liveNews.length);
+    console.log(this.liveNews);
     let texts = [];
     try {
       const feedPromises = this.rssFeedURLs.map((url) => this.rssParser.parseURL(url));
       const feeds = await Promise.all(feedPromises);
 
-      for (const feed of feeds) {
+      const rssFeedsPromises = feeds.map(async (feed) => {
         try {
           // Just grab the newest from the feed as feeds do not update requently
           // enough
@@ -377,23 +444,79 @@ const newsBot = {
             let url = newest["link"];
             let title = newest["title"];
             texts.push(title);
-            await this.addNews(title, url);
+            await Promise.all([this.addLiveNews(title, url), this.addRawNews(title)]);
           }
         } catch (err) {
           console.error("Error with processing RSS feed data: ", err);
         }
-      }
+      });
+
+      await Promise.all(rssFeedsPromises);
     } catch (err) {
       console.error("Error with receiving data from RSS feed: ", err);
     }
+  },
 
+  //------------------------------------------------------------------------
+  // Start listening to Alpaca's websocket
+  //------------------------------------------------------------------------
+  async listenAlpacaWebsocket() {
+    const ws = new WebSocket(this.ALPACA_WEBSOCKET_NEWS_URL);
+
+    ws.on("open", () => {
+      console.log("Connected to Alpaca websocket");
+
+      ws.send(
+        JSON.stringify({
+          action: "auth",
+          key: this.ALPACA_API_KEY,
+          secret: this.ALPACA_SECRET,
+        })
+      );
+    });
+
+    ws.on("message", async (d) => {
+      const message = JSON.parse(d)[0];
+
+      if (message["T"] === "success" && message["msg"] === "authenticated") {
+        console.log("Authenticated in Alpaca websocket");
+        ws.send(
+          JSON.stringify({
+            action: "subscribe",
+            news: ["*"],
+          })
+        );
+      } else if (message.T === "n") {
+        await Promise.all([
+          this.addLiveNews(message.headline, message.url),
+          this.addRawNews(message.headline),
+        ]);
+      } else {
+        console.log("Recieved unrecognized data from Alpaca", message);
+      }
+    });
+
+    ws.on("error", (err) => {
+      console.log("Websocket error:", err);
+    });
+
+    ws.on("close", () => {
+      console.log("Alpaca websocket closed");
+    });
+  },
+
+  //------------------------------------------------------------------------
+  // Process the raw news before clearning it
+  //------------------------------------------------------------------------
+  async processRawNews() {
+    const relaseFunc = await this.rawNewsMutex.acquire();
     try {
-      let queryURL = `https://localhost:${this.ML_PORT}/findOrgs`;
-      const response = await axios.post(queryURL, texts, { httpsAgent: this.HTTPS_AGENT });
-      let orgs = response.data["orgs"];
-      console.log(orgs);
-    } catch (err) {
-      console.error("Failed to get list of organizations from ML.py:", err);
+      let orgs = await this.findOrgs(this.rawNews);
+      console.log("getting orgs", orgs);
+      // populate todayStockSet with the orgs after filtering them
+      this.rawNews = [];
+    } finally {
+      relaseFunc();
     }
   },
 };

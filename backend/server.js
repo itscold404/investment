@@ -45,16 +45,10 @@ https.createServer(options, backend).listen(BACKEND_PORT, () => {
 });
 
 // Initialize the newsBot
-const FEED_REFRESH_IN_MINUTES = 7;
+// use prime number to prevent overlap with other timers?
+const FEED_REFRESH_IN_SECONDS = 421;
 // const FEED_REFRESH_IN_MINUTES = 0.1; // remove after testing
-var nb = newsBot.init_bot(FEED_REFRESH_IN_MINUTES);
-
-// Get news through RSS Feeds every 7 minutes, but make a call on
-// program startup
-nb.fetchRSS();
-setInterval(async () => {
-  nb.fetchRSS();
-}, FEED_REFRESH_IN_MINUTES * 60 * 1000);
+var nb = newsBot.init_bot(FEED_REFRESH_IN_SECONDS);
 
 //------------------------------------------------------------------------
 // Translate error messages to be user understandable
