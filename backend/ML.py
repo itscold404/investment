@@ -4,6 +4,7 @@ from transformers import pipeline
 from flask import Flask, request
 from dotenv import load_dotenv
 import torch
+from yahooquery import search
 
 load_dotenv()
 
@@ -75,9 +76,9 @@ def analyze():
 
 
 # ------------------------------------------------------------------------
-# Find names of organizations witin texts.
+# Find ticker symbols of organizations witin texts.
 # ------------------------------------------------------------------------
-@app.route("/findOrgs", methods=["POST"])
+@app.route("/findTickers", methods=["POST"])
 def findOrgs():
     texts = request.json
     org_names = set()
@@ -95,7 +96,19 @@ def findOrgs():
         print(f"Failed to find orgs from text with spacy")
         print("Error:", err)
 
-    return {"orgs": list(org_names)}
+    ticker_symbols = []
+    for org in org_names:
+        print("searching for:", org)
+        try:
+            item = search(news_count=0, first_quote=True, query=org)
+            print(item.get("symbol"))
+            if item.get("symbol") != None:
+                ticker_symbols.append(item.get("symbol"))
+        except Exception as e:
+            print(f"Error searching for ticker symbol for {org}: {e}")
+            
+        
+    return {"symbols": ticker_symbols}
 
 
 # ------------------------------------------------------------------------

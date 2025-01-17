@@ -22,8 +22,8 @@ const newsBot = {
   ENABLE_POLYGON_API: false, // Make or not make API calls to Polygon.io
   ML_PORT: process.env.ML_PORT, //Port for sentiment analysis API
 
-  // How often to fetch from RSS feed in seconds. Default 600 seconds
-  RSS_REFRESH: 600,
+  // How often to fetch from RSS feed in minutes. Default is 10
+  RSS_REFRESH: 10,
 
   // URL for Alpaca's websocket news
   ALPACA_WEBSOCKET_NEWS_URL: "wss://stream.data.alpaca.markets/v1beta1/news",
@@ -87,19 +87,11 @@ const newsBot = {
   init_bot(rssRefresh) {
     this.RSS_REFRESH = rssRefresh;
 
-    // TODO: Figure out how to effectively map name from text to ticker
-    // symbol
-    // // Get news through RSS Feeds, but make a call on program startup
-    // this.fetchRSS();
-    // setInterval(async () => {
-    //   this.fetchRSS();
-    // }, this.RSS_REFRESH * 1000);
-
-    // // Process rawNews and add to todayStockSet every 10 seconds
-    // const SECONDS = 5;
-    // setInterval(async () => {
-    //   this.processRawNews();
-    // }, SECONDS * 1000);
+    // Get news through RSS Feeds, but make a call on program startup
+    this.fetchRSS();
+    setInterval(async () => {
+      this.fetchRSS();
+    }, this.RSS_REFRESH * 60 * 1000);
 
     // Start getting news from Alpaca websocket
     this.listenAlpacaWebsocket();
@@ -167,7 +159,8 @@ const newsBot = {
     // this news from the rss feed has already been seen/processed
     const now = new Date();
 
-    const refresh = this.RSS_REFRESH * 1000;
+    const refresh = this.RSS_REFRESH * 60 * 1000;
+    
     // const refresh = 1440 * 60 * 1000; // TODO: remove when finished testing
 
     let timeDiff = now.getTime() - pubDate;
@@ -176,16 +169,17 @@ const newsBot = {
   },
 
   //------------------------------------------------------------------------
-  // Find the organizations within an array of text
+  // Find the ticker symbols within an array of text
   // array texts: array of strings to search for organizations
-  // return the list of organizations in the texts
+  // return the list strings of ticker symbols
   //------------------------------------------------------------------------
-  async findOrgs(texts) {
+  async findTickerSymbols(texts) {
     try {
-      let queryURL = `https://localhost:${this.ML_PORT}/findOrgs`;
+      let queryURL = `https://localhost:${this.ML_PORT}/findTickers`;
       const response = await axios.post(queryURL, texts, { httpsAgent: this.HTTPS_AGENT });
-      let orgs = response.data["orgs"];
-      return orgs;
+      let symbols = response.data["symbols"];
+      return symbols;
+      
     } catch (err) {
       console.error("Failed to get list of organizations from ML.py:", err);
     }
@@ -455,6 +449,8 @@ const newsBot = {
     } catch (err) {
       console.error("Error with receiving data from RSS feed: ", err);
     }
+
+    this.processRawNews();
   },
 
   //------------------------------------------------------------------------
@@ -478,7 +474,7 @@ const newsBot = {
     ws.on("message", async (d) => {
       const message = JSON.parse(d)[0];
 
-      if (message["T"] === "success" && message["msg"] === "authenticated") {
+      if (message.T === "success" && message.msg === "authenticated") {
         console.log("Authenticated in Alpaca websocket");
         ws.send(
           JSON.stringify({
@@ -487,16 +483,12 @@ const newsBot = {
           })
         );
       } else if (message.T === "n") {
-        // TODO: uncomment when RSS feed and text processing properly implemented
-        // await Promise.all([
-        //   this.addLiveNews(message.headline, message.url),
-        //   this.addRawNews(message.headline),
-        // ]);
-
-        this.liveNews.push(message.headline, message.url);
-        for (symbol in message.symbols) {
+        this.addLiveNews(message.headline, message.url);
+        for (const symbol in message.symbols) {
           this.todayStockSet.add(symbol);
         }
+        console.log(message.headline, message.url);
+        console.log("current symbols: ", this.todayStockSet);
       } else {
         console.log("Recieved unrecognized data from Alpaca", message);
       }
@@ -512,29 +504,33 @@ const newsBot = {
   },
 
   //------------------------------------------------------------------------
-  // Process the raw news before clearning it
+  // Process the raw news before clearing it
   //------------------------------------------------------------------------
-  // TODO: still implementing
   async processRawNews() {
     const relaseFunc = await this.queuedNewsMutex.acquire();
-    console.log(this.liveNews);
+    let copyQueuedNews = this.queuedNews;
+    this.queuedNews = [];
+    relaseFunc();
+
     try {
       // Check list to remove part of sentence after special character "&#""
-      for (let i = 0; i < this.queuedNews.length; ++i) {
-        let specialIndex = this.queuedNews[i].indexOf("&#");
+      for (let i = 0; i < copyQueuedNews.length; ++i) {
+        let specialIndex = copyQueuedNews[i].indexOf("&#");
         if (specialIndex !== -1) {
-          this.containsSpecial.push(this.queuedNews[i]);
-          this.queuedNews[i] = this.queuedNews[i].substring(0, specialIndex);
-          console.log(this.containsSpecial);
+          this.containsSpecial.push(copyQueuedNews[i]);
+          copyQueuedNews[i] = copyQueuedNews[i].substring(0, specialIndex);
+          console.log("SPECIAL CHARACTERS DETECTED", this.containsSpecial);
         }
       }
-      let orgs = await this.findOrgs(this.queuedNews);
-      console.log("news", this.queuedNews);
 
-      // TODO: populate todayStockSet with the orgs after filtering them
-      this.queuedNews = [];
-    } finally {
-      relaseFunc();
+      let orgs = await this.findTickerSymbols(copyQueuedNews);
+      for (const org of orgs) {
+        this.todayStockSet.add(org);
+      }
+
+      console.log("curent symbols: ", this.todayStockSet);
+    } catch (err) {
+      console.error("Error with processing news", err);
     }
   },
 };
