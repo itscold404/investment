@@ -160,6 +160,7 @@ const newsBot = {
     const now = new Date();
 
     const refresh = this.RSS_REFRESH * 60 * 1000;
+    
     // const refresh = 1440 * 60 * 1000; // TODO: remove when finished testing
 
     let timeDiff = now.getTime() - pubDate;
@@ -178,6 +179,7 @@ const newsBot = {
       const response = await axios.post(queryURL, texts, { httpsAgent: this.HTTPS_AGENT });
       let symbols = response.data["symbols"];
       return symbols;
+      
     } catch (err) {
       console.error("Failed to get list of organizations from ML.py:", err);
     }
