@@ -51,7 +51,7 @@ def analyze():
             results = finbert_sentiment_pipeline(data, batch_size=BATCH_SIZE)
 
             for value in results:
-                label, score = value["label"], value["score"]
+                label = value["label"]
                 determination = 0
 
                 # Accept sentiment anlysis is Positive or Negative
@@ -68,6 +68,9 @@ def analyze():
             print(f"Batch size before error: {BATCH_SIZE}")
             print("Error:", err)
 
+    # TODO: could try removing everything after verb to get majority of cases
+    # TODO: could also use fuzzy match to see if stock name from yahoo news
+    # kinda matches resulting text
     return {"analysis": analysis}
 
 

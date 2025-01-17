@@ -65,9 +65,9 @@ const newsBot = {
   // Elements should be {title: "title", url: "url"}
   liveNews: [],
 
-  // News that need to be processed by fetching their organization name.
+  // News queued to be processed (fetching their organization name).
   // Elements are ["title", ...]
-  rawNews: [],
+  queuedNews: [],
 
   // Set of stocks from todays news
   todayStockSet: new Set(),
@@ -76,7 +76,9 @@ const newsBot = {
   liveNewsMutex: new Mutex(),
 
   // Mutex used to add to rawNews array
-  rawNewsMutex: new Mutex(),
+  queuedNewsMutex: new Mutex(),
+
+  containsSpecial: [], // for testing purposes
 
   //------------------------------------------------------------------------
   // Initialize the bot
@@ -85,18 +87,19 @@ const newsBot = {
   init_bot(rssRefresh) {
     this.RSS_REFRESH = rssRefresh;
 
-    // Get news through RSS Feeds every 7 minutes, but make a call on
-    // program startup
-    this.fetchRSS();
-    setInterval(async () => {
-      this.fetchRSS();
-    }, this.RSS_REFRESH * 60 * 1000);
+    // TODO: Figure out how to effectively map name from text to ticker
+    // symbol
+    // // Get news through RSS Feeds, but make a call on program startup
+    // this.fetchRSS();
+    // setInterval(async () => {
+    //   this.fetchRSS();
+    // }, this.RSS_REFRESH * 1000);
 
-    // Process rawNews and add to todayStockSet every 10 seconds
-    const SECONDS = 10;
-    setInterval(async () => {
-      this.processRawNews();
-    }, SECONDS * 1000);
+    // // Process rawNews and add to todayStockSet every 10 seconds
+    // const SECONDS = 5;
+    // setInterval(async () => {
+    //   this.processRawNews();
+    // }, SECONDS * 1000);
 
     // Start getting news from Alpaca websocket
     this.listenAlpacaWebsocket();
@@ -130,10 +133,10 @@ const newsBot = {
   // string newsTitle: Title of the article
   //------------------------------------------------------------------------
   async addRawNews(newsTitle) {
-    const relaseFunc = await this.rawNewsMutex.acquire();
+    const relaseFunc = await this.queuedNewsMutex.acquire();
 
     try {
-      this.rawNews.push(newsTitle);
+      this.queuedNews.push(newsTitle);
     } finally {
       relaseFunc();
     }
@@ -164,7 +167,7 @@ const newsBot = {
     // this news from the rss feed has already been seen/processed
     const now = new Date();
 
-    const refresh = this.RSS_REFRESH * 60 * 1000;
+    const refresh = this.RSS_REFRESH * 1000;
     // const refresh = 1440 * 60 * 1000; // TODO: remove when finished testing
 
     let timeDiff = now.getTime() - pubDate;
@@ -427,7 +430,6 @@ const newsBot = {
   //------------------------------------------------------------------------
   async fetchRSS() {
     console.log(this.liveNews);
-    let texts = [];
     try {
       const feedPromises = this.rssFeedURLs.map((url) => this.rssParser.parseURL(url));
       const feeds = await Promise.all(feedPromises);
@@ -442,7 +444,6 @@ const newsBot = {
           if (this.shouldAddRssFeed(pubDate)) {
             let url = newest["link"];
             let title = newest["title"];
-            texts.push(title);
             await Promise.all([this.addLiveNews(title, url), this.addRawNews(title)]);
           }
         } catch (err) {
@@ -486,10 +487,16 @@ const newsBot = {
           })
         );
       } else if (message.T === "n") {
-        await Promise.all([
-          this.addLiveNews(message.headline, message.url),
-          this.addRawNews(message.headline),
-        ]);
+        // TODO: uncomment when RSS feed and text processing properly implemented
+        // await Promise.all([
+        //   this.addLiveNews(message.headline, message.url),
+        //   this.addRawNews(message.headline),
+        // ]);
+
+        this.liveNews.push(message.headline, message.url);
+        for (symbol in message.symbols) {
+          this.todayStockSet.add(symbol);
+        }
       } else {
         console.log("Recieved unrecognized data from Alpaca", message);
       }
@@ -507,13 +514,25 @@ const newsBot = {
   //------------------------------------------------------------------------
   // Process the raw news before clearning it
   //------------------------------------------------------------------------
+  // TODO: still implementing
   async processRawNews() {
-    const relaseFunc = await this.rawNewsMutex.acquire();
+    const relaseFunc = await this.queuedNewsMutex.acquire();
+    console.log(this.liveNews);
     try {
-      let orgs = await this.findOrgs(this.rawNews);
-      console.log("getting orgs", orgs);
+      // Check list to remove part of sentence after special character "&#""
+      for (let i = 0; i < this.queuedNews.length; ++i) {
+        let specialIndex = this.queuedNews[i].indexOf("&#");
+        if (specialIndex !== -1) {
+          this.containsSpecial.push(this.queuedNews[i]);
+          this.queuedNews[i] = this.queuedNews[i].substring(0, specialIndex);
+          console.log(this.containsSpecial);
+        }
+      }
+      let orgs = await this.findOrgs(this.queuedNews);
+      console.log("news", this.queuedNews);
+
       // TODO: populate todayStockSet with the orgs after filtering them
-      this.rawNews = [];
+      this.queuedNews = [];
     } finally {
       relaseFunc();
     }
