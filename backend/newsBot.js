@@ -1,14 +1,18 @@
+import rssFeedURLs from "../data/rss_URLs.js";
 import axios from "axios";
 import dotevn from "dotenv";
 import Stock from "./stock.js";
 import https from "https";
 import fs from "fs";
+import Parser from "rss-parser";
+import WebSocket from "ws";
+import { Mutex } from "async-mutex";
 
 dotevn.config({ path: "../.env" });
 
 const newsBot = {
   //------------------------------------------------------------------------
-  // Constants
+  // Constants and global variables
   //------------------------------------------------------------------------
   POLYGON_BASE_URL: process.env.POLYGON_BASE_URL, // Polygon.io base url
   POLYGON_API_KEY: process.env.POLYGON_API_KEY, // Polygon.io API key
@@ -16,9 +20,19 @@ const newsBot = {
   ALPACA_SECRET: process.env.ALPACA_SECRET_API_KEY, // Polygon.io API key
   RELEVANT_DATE: 1, // Number of days that passed of relevant news article
   ENABLE_POLYGON_API: false, // Make or not make API calls to Polygon.io
+  ML_PORT: process.env.ML_PORT, //Port for sentiment analysis API
 
-  //Port for sentiment analysis API
-  SENTIMENT_ANALYSIS_PORT: process.env.SENTIMENT_ANALYSIS_PORT,
+  // How often to fetch from RSS feed in seconds. Default 600 seconds
+  RSS_REFRESH: 600,
+
+  // URL for Alpaca's websocket news
+  ALPACA_WEBSOCKET_NEWS_URL: "wss://stream.data.alpaca.markets/v1beta1/news",
+
+  // URL for Alpaca's websocket news
+  ALPACA_WEBSOCKET_TEST_NEWS_URL: "wss://stream.data.sandbox.alpaca.markets/v1beta1/news",
+
+  // Number of news in liveNews before removing old news
+  LIVE_NEWS_ARRAY_LIMIT: 100,
 
   // Number of articles to receive per API call to Polygon.io and
   // Alpaca for stock news
@@ -27,32 +41,113 @@ const newsBot = {
   // Number of stocks per API request to Alpaca for news
   STOCK_PER_REQUEST_PATCH: 60,
 
+  // Cert for HTTPS communication
+  HTTPS_AGENT: new https.Agent({
+    ca: fs.readFileSync("../cert/cert.pem"),
+  }),
+
   // All stocks, as a Stock object in the stock market with percent
   // change within [returnLowerBound, returnHigherBound].
-  // This hashmap is formatted: {stock_symbol: Stock}
+  // This hashmap is formatted: {"stock_symbol": Stock}
   stocks: new Map(),
 
+  // Map of long name of stocks to their ticket symbol
+  longNameToSymbol: new Map(),
+
+  // RSS feed parser
+  rssParser: new Parser(),
+
+  // All URL's to listen for RSS feeds
+  rssFeedURLs: rssFeedURLs,
+
+  // All news gathered from RSS feeds as this bot is running. To be
+  // displayed to front-end.
+  // Elements should be {title: "title", url: "url"}
+  liveNews: [],
+
+  // News queued to be processed (fetching their organization name).
+  // Elements are ["title", ...]
+  queuedNews: [],
+
+  // Set of stocks from todays news
+  todayStockSet: new Set(),
+
+  // Mutex used to add to liveNews array
+  liveNewsMutex: new Mutex(),
+
+  // Mutex used to add to rawNews array
+  queuedNewsMutex: new Mutex(),
+
+  containsSpecial: [], // for testing purposes
+
   //------------------------------------------------------------------------
-  // Sorts the list of stocks in decending 1 day percent change
+  // Initialize the bot
+  // int rssRefresh: How often to fetch from RSS feeds
   //------------------------------------------------------------------------
-  sortStockDescending(list) {
-    // let sorted = list.sort((a, b) => b.dayPercentChange - a.dayPercentChange);
-    // return sorted;
+  init_bot(rssRefresh) {
+    this.RSS_REFRESH = rssRefresh;
+
+    // TODO: Figure out how to effectively map name from text to ticker
+    // symbol
+    // // Get news through RSS Feeds, but make a call on program startup
+    // this.fetchRSS();
+    // setInterval(async () => {
+    //   this.fetchRSS();
+    // }, this.RSS_REFRESH * 1000);
+
+    // // Process rawNews and add to todayStockSet every 10 seconds
+    // const SECONDS = 5;
+    // setInterval(async () => {
+    //   this.processRawNews();
+    // }, SECONDS * 1000);
+
+    // Start getting news from Alpaca websocket
+    this.listenAlpacaWebsocket();
+    return newsBot;
   },
 
   //------------------------------------------------------------------------
-  // Sorts the list of stocks in decending 1 day percent change
+  // Add news from RSS feeds and Alpaca websocket (live news) with mutex to
+  // the BEGINNING of liveNews array.
+  // string newsTitle: Title of the article
+  // string url: URL of the article
   //------------------------------------------------------------------------
-  sortStockAscending(list) {
-    // let sorted = list.sort((a, b) => a.dayPercentChange - b.dayPercentChange);
-    // return sorted;
+  async addLiveNews(newsTitle, url) {
+    let newsToAdd = { title: newsTitle, url: url };
+    const relaseFunc = await this.liveNewsMutex.acquire();
+
+    try {
+      this.liveNews.unshift(newsToAdd);
+
+      if (this.liveNews.length > this.LIVE_NEWS_ARRAY_LIMIT) {
+        this.liveNews.pop();
+      }
+    } finally {
+      relaseFunc();
+    }
+  },
+
+  //------------------------------------------------------------------------
+  // Add news from RSS feeds and Alpaca websocket (live news) with mutex to
+  // the rawNews array.
+  // string newsTitle: Title of the article
+  //------------------------------------------------------------------------
+  async addRawNews(newsTitle) {
+    const relaseFunc = await this.queuedNewsMutex.acquire();
+
+    try {
+      this.queuedNews.push(newsTitle);
+    } finally {
+      relaseFunc();
+    }
   },
 
   //------------------------------------------------------------------------
   // Check if the UTC date is within the Time specified
-  // utcDate: the UTC Date as a string (ex. 2024-05-10T20:15:00Z)
+  // String utcDate: the UTC Date as a string (ex. 2024-05-10T20:15:00Z)
+  // return true if the UTC date is within. false otherwise
   //------------------------------------------------------------------------
-  withinRelevantTime(utcDate) {
+  withinRelevantDate(utcDate) {
     const now = new Date();
     const targetDate = new Date(utcDate);
     const diff = now.getTime() - targetDate.getTime();
@@ -62,11 +157,48 @@ const newsBot = {
   },
 
   //------------------------------------------------------------------------
+  // Check if the RSS feed news should be added depending on its publishing
+  // date and time
+  // Date pubDate: the UTC Date
+  // return true if it should be added. false otherwise
+  //------------------------------------------------------------------------
+  shouldAddRssFeed(pubDate) {
+    // If pubDate is older than currtime - RSS_REFRESH, then we know that
+    // this news from the rss feed has already been seen/processed
+    const now = new Date();
+
+    const refresh = this.RSS_REFRESH * 1000;
+    // const refresh = 1440 * 60 * 1000; // TODO: remove when finished testing
+
+    let timeDiff = now.getTime() - pubDate;
+
+    return timeDiff <= refresh;
+  },
+
+  //------------------------------------------------------------------------
+  // Find the organizations within an array of text
+  // array texts: array of strings to search for organizations
+  // return the list of organizations in the texts
+  //------------------------------------------------------------------------
+  async findOrgs(texts) {
+    try {
+      let queryURL = `https://localhost:${this.ML_PORT}/findOrgs`;
+      const response = await axios.post(queryURL, texts, { httpsAgent: this.HTTPS_AGENT });
+      let orgs = response.data["orgs"];
+      return orgs;
+    } catch (err) {
+      console.error("Failed to get list of organizations from ML.py:", err);
+    }
+
+    return [];
+  },
+
+  //------------------------------------------------------------------------
   // Populate the list of stocks with percent change of
   // [lowerBound, upperBound]
   //
-  // lowerBound: Lower bound of stock price change for 1 day
-  // upperBound: Higher bound of stock price change for 1 day
+  // int lowerBound: Lower bound of stock price change for 1 day
+  // int upperBound: Higher bound of stock price change for 1 day
   //------------------------------------------------------------------------
   async fillStocksList(lowerBound, upperBound) {
     let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=${this.POLYGON_API_KEY}`;
@@ -109,7 +241,7 @@ const newsBot = {
 
           news.results.forEach((newsArticle) => {
             // Only add relevant news
-            if (this.withinRelevantTime(newsArticle.published_utc)) {
+            if (this.withinRelevantDate(newsArticle.published_utc)) {
               let newsMap = new Map();
               newsMap.set("date", newsArticle.published_utc);
               newsMap.set("title", newsArticle.title);
@@ -158,7 +290,7 @@ const newsBot = {
       stockBatch.push(key);
 
       // Send API calls in batches or if this is the last stock in the list
-      if (numStocks % this.STOCK_PER_REQUEST_PATCH == 0 || numStocks == this.stocks.size) {
+      if (numStocks % this.STOCK_PER_REQUEST_PATCH === 0 || numStocks === this.stocks.size) {
         let symbols = stockBatch.join(",");
 
         console.log("Requesting news on batch:", symbols);
@@ -245,12 +377,9 @@ const newsBot = {
 
     let scores = [];
     try {
-      let queryURL = `https://localhost:${this.SENTIMENT_ANALYSIS_PORT}/analyze`;
-      const httpsAgent = new https.Agent({
-        ca: fs.readFileSync("../cert/cert.pem"),
-      });
+      let queryURL = `https://localhost:${this.ML_PORT}/analyze`;
 
-      const response = await axios.post(queryURL, newsToAnalyze, { httpsAgent });
+      const response = await axios.post(queryURL, newsToAnalyze, { httpsAgent: this.HTTPS_AGENT });
       scores = response.data["analysis"];
     } catch (err) {
       console.error("Failed to get sentiment analysis:", err);
@@ -286,12 +415,127 @@ const newsBot = {
 
   //------------------------------------------------------------------------
   // Get recommendations for what stocks to buy based on the news
+  // int lower: lower bounds as a percent
+  // int upper: upperbound as a percent
   //------------------------------------------------------------------------
   async getStockSuggestions(lower, upper) {
     await this.fillStocksList(lower, upper);
     await this.fillStockNews();
     await this.getSentimentAnalysis();
     return Array.from(this.stocks.values());
+  },
+
+  //------------------------------------------------------------------------
+  // Fetch news from RSS. Populate the array of live news
+  //------------------------------------------------------------------------
+  async fetchRSS() {
+    console.log(this.liveNews);
+    try {
+      const feedPromises = this.rssFeedURLs.map((url) => this.rssParser.parseURL(url));
+      const feeds = await Promise.all(feedPromises);
+
+      const rssFeedsPromises = feeds.map(async (feed) => {
+        try {
+          // Just grab the newest from the feed as feeds do not update requently
+          // enough
+          let newest = feed["items"][0];
+          let pubDate = new Date(newest["pubDate"]);
+
+          if (this.shouldAddRssFeed(pubDate)) {
+            let url = newest["link"];
+            let title = newest["title"];
+            await Promise.all([this.addLiveNews(title, url), this.addRawNews(title)]);
+          }
+        } catch (err) {
+          console.error("Error with processing RSS feed data: ", err);
+        }
+      });
+
+      await Promise.all(rssFeedsPromises);
+    } catch (err) {
+      console.error("Error with receiving data from RSS feed: ", err);
+    }
+  },
+
+  //------------------------------------------------------------------------
+  // Start listening to Alpaca's websocket
+  //------------------------------------------------------------------------
+  async listenAlpacaWebsocket() {
+    const ws = new WebSocket(this.ALPACA_WEBSOCKET_NEWS_URL);
+
+    ws.on("open", () => {
+      console.log("Connected to Alpaca websocket");
+
+      ws.send(
+        JSON.stringify({
+          action: "auth",
+          key: this.ALPACA_API_KEY,
+          secret: this.ALPACA_SECRET,
+        })
+      );
+    });
+
+    ws.on("message", async (d) => {
+      const message = JSON.parse(d)[0];
+
+      if (message["T"] === "success" && message["msg"] === "authenticated") {
+        console.log("Authenticated in Alpaca websocket");
+        ws.send(
+          JSON.stringify({
+            action: "subscribe",
+            news: ["*"],
+          })
+        );
+      } else if (message.T === "n") {
+        // TODO: uncomment when RSS feed and text processing properly implemented
+        // await Promise.all([
+        //   this.addLiveNews(message.headline, message.url),
+        //   this.addRawNews(message.headline),
+        // ]);
+
+        this.liveNews.push(message.headline, message.url);
+        for (symbol in message.symbols) {
+          this.todayStockSet.add(symbol);
+        }
+      } else {
+        console.log("Recieved unrecognized data from Alpaca", message);
+      }
+    });
+
+    ws.on("error", (err) => {
+      console.log("Websocket error:", err);
+    });
+
+    ws.on("close", () => {
+      console.log("Alpaca websocket closed");
+    });
+  },
+
+  //------------------------------------------------------------------------
+  // Process the raw news before clearning it
+  //------------------------------------------------------------------------
+  // TODO: still implementing
+  async processRawNews() {
+    const relaseFunc = await this.queuedNewsMutex.acquire();
+    console.log(this.liveNews);
+    try {
+      // Check list to remove part of sentence after special character "&#""
+      for (let i = 0; i < this.queuedNews.length; ++i) {
+        let specialIndex = this.queuedNews[i].indexOf("&#");
+        if (specialIndex !== -1) {
+          this.containsSpecial.push(this.queuedNews[i]);
+          this.queuedNews[i] = this.queuedNews[i].substring(0, specialIndex);
+          console.log(this.containsSpecial);
+        }
+      }
+      let orgs = await this.findOrgs(this.queuedNews);
+      console.log("news", this.queuedNews);
+
+      // TODO: populate todayStockSet with the orgs after filtering them
+      this.queuedNews = [];
+    } finally {
+      relaseFunc();
+    }
   },
 };
 

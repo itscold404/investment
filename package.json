@@ -10,13 +10,16 @@
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^3.1.2",
+    "async-mutex": "^0.5.0",
     "axios": "^1.7.9",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "openssl-wrapper": "^0.3.4",
+    "rss-parser": "^3.13.0",
     "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
+    "vue-router": "^4.5.0",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",

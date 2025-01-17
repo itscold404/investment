@@ -1,0 +1,26 @@
+const rssFeedURLs = [
+  "https://www.investing.com/rss/news.rss",
+  "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114",
+  "https://feeds.content.dowjones.io/public/rss/mw_marketpulse",
+  "https://www.globenewswire.com/RssFeed/subjectcode/27-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions",
+  "https://www.globenewswire.com/RssFeed/orgclass/1/feedTitle/GlobeNewswire%20-%20News%20about%20Public%20Companies",
+  "https://www.globenewswire.com/RssFeed/subjectcode/12-Dividend%20Reports%20and%20Estimates/feedTitle/GlobeNewswire%20-%20Dividend%20Reports%20and%20Estimates",
+  "https://www.globenewswire.com/RssFeed/subjectcode/13-Earnings%20Releases%20and%20Operating%20Results/feedTitle/GlobeNewswire%20-%20Earnings%20Releases%20and%20Operating%20Results",
+  "https://www.globenewswire.com/RssFeed/subjectcode/86-Management%20Changes/feedTitle/GlobeNewswire%20-%20Management%20Changes",
+  "https://www.globenewswire.com/RssFeed/subjectcode/21-Initial%20Public%20Offerings/feedTitle/GlobeNewswire%20-%20Initial%20Public%20Offerings",
+  "https://www.globenewswire.com/RssFeed/subjectcode/59-Major%20Shareholder%20Announcements/feedTitle/GlobeNewswire%20-%20Major%20Shareholder%20Announcements",
+  "https://www.globenewswire.com/RssFeed/subjectcode/10-Company%20Regulatory%20Filings/feedTitle/GlobeNewswire%20-%20Company%20Regulatory%20Filings",
+  "https://www.globenewswire.com/RssFeed/subjectcode/22-Insider%2027s%20Buy%202fSell/feedTitle/GlobeNewswire%20-%20Insider%20s%20Buy,%20Sell",
+  "https://www.globenewswire.com/RssFeed/subjectcode/32-Product%202f%20Services%20Announcement/feedTitle/GlobeNewswire%20-%20Product%20,%20Services%20Announcement",
+  "https://www.globenewswire.com/RssFeed/subjectcode/81-Market%20Research%20Reports/feedTitle/GlobeNewswire%20-%20Market%20Research%20Reports",
+  "https://www.globenewswire.com/RssFeed/subjectcode/37-Restructuring%202f%20Recapitalization/feedTitle/GlobeNewswire%20-%20Restructuring%20,%20Recapitalization",
+  "https://www.globenewswire.com/RssFeed/subjectcode/39-Stock%20Market%20News/feedTitle/GlobeNewswire%20-%20Stock%20Market%20News",
+  "https://www.globenewswire.com/RssFeed/subjectcode/23-Joint%20Venture/feedTitle/GlobeNewswire%20-%20Joint%20Venture",
+  "https://www.globenewswire.com/RssFeed/subjectcode/30-Patents/feedTitle/GlobeNewswire%20-%20Patents",
+  "https://www.globenewswire.com/RssFeed/subjectcode/68-Trading%20Information/feedTitle/GlobeNewswire%20-%20Trading%20Information",
+  "https://www.globenewswire.com/RssFeed/subjectcode/61-Corporate%20Action/feedTitle/GlobeNewswire%20-%20Corporate%20Action",
+  "https://www.globenewswire.com/RssFeed/subjectcode/67-Management%20Statements/feedTitle/GlobeNewswire%20-%20Management%20Statements",
+  "https://www.globenewswire.com/RssFeed/subjectcode/89-Conference%20Calls%202f%20Webcasts/feedTitle/GlobeNewswire%20-%20Conference%20Calls,%20Webcasts",
+];
+
+export default rssFeedURLs;
