@@ -36,8 +36,8 @@ backend
   .use(express.json());
 
 let options = {
-  key: fs.readFileSync("../cert/key.pem"),
-  cert: fs.readFileSync("../cert/cert.pem"),
+  key: fs.readFileSync("../../cert/key.pem"),
+  cert: fs.readFileSync("../../cert/cert.pem"),
 };
 
 https.createServer(options, backend).listen(BACKEND_PORT, () => {
@@ -46,7 +46,6 @@ https.createServer(options, backend).listen(BACKEND_PORT, () => {
 
 // Initialize the newsBot
 const FEED_REFRESH_IN_MINUTES = 10;
-// const FEED_REFRESH_IN_MINUTES = 0.1; // remove after testing
 var nb = newsBot.init_bot(FEED_REFRESH_IN_MINUTES);
 
 //------------------------------------------------------------------------

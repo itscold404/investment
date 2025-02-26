@@ -1,4 +1,4 @@
-import rssFeedURLs from "../data/rss_URLs.js";
+import rssFeedURLs from "../../data/rss_URLs.js";
 import axios from "axios";
 import dotevn from "dotenv";
 import Stock from "./stock.js";
@@ -7,8 +7,9 @@ import fs from "fs";
 import Parser from "rss-parser";
 import WebSocket from "ws";
 import { Mutex } from "async-mutex";
+import OpenAI from "openai";
 
-dotevn.config({ path: "../.env" });
+dotevn.config({ path: "../../.env" });
 
 const newsBot = {
   //------------------------------------------------------------------------
@@ -43,7 +44,12 @@ const newsBot = {
 
   // Cert for HTTPS communication
   HTTPS_AGENT: new https.Agent({
-    ca: fs.readFileSync("../cert/cert.pem"),
+    ca: fs.readFileSync("../../cert/cert.pem"),
+  }),
+
+  // OpenAI
+  openai: new OpenAI({
+    apiKey: process.env.OPEN_AI_KEY,
   }),
 
   // All stocks, as a Stock object in the stock market with percent
@@ -65,18 +71,25 @@ const newsBot = {
   // Elements should be {title: "title", url: "url"}
   liveNews: [],
 
-  // News queued to be processed (fetching their organization name).
+  // RSS news queued to be processed (fetching their organization name).
   // Elements are ["title", ...]
-  queuedNews: [],
+  queuedRSSNews: [],
+
+  // Websocket news queued to be processed (fetching their organization name).
+  // Elements are [{title: "news title", symbols: ["ticker symbols", ...]}, ...]
+  queuedWebsocketNews: [],
 
   // Set of stocks from todays news
-  todayStockSet: new Set(),
+  todayPotentialStockSet: new Set(),
 
   // Mutex used to add to liveNews array
   liveNewsMutex: new Mutex(),
 
-  // Mutex used to add to rawNews array
-  queuedNewsMutex: new Mutex(),
+  // Mutex used to add to queuedRSSNews array
+  queuedRSSNewsMutex: new Mutex(),
+
+  // Mutex used to add to queuedWebsocketNews array
+  queuedWebsocketNewsMutex: new Mutex(),
 
   containsSpecial: [], // for testing purposes
 
@@ -92,6 +105,12 @@ const newsBot = {
     setInterval(async () => {
       this.fetchRSS();
     }, this.RSS_REFRESH * 60 * 1000);
+
+    // Process all news every 30 seconds
+    let rateAllNewsTime = 0.5;
+    setInterval(async () => {
+      this.processRawNews();
+    }, rateAllNewsTime * 60 * 1000);
 
     // Start getting news from Alpaca websocket
     this.listenAlpacaWebsocket();
@@ -109,13 +128,17 @@ const newsBot = {
     const relaseFunc = await this.liveNewsMutex.acquire();
 
     try {
-      this.liveNews.unshift(newsToAdd);
+      try {
+        this.liveNews.unshift(newsToAdd);
 
-      if (this.liveNews.length > this.LIVE_NEWS_ARRAY_LIMIT) {
-        this.liveNews.pop();
+        if (this.liveNews.length > this.LIVE_NEWS_ARRAY_LIMIT) {
+          this.liveNews.pop();
+        }
+      } finally {
+        relaseFunc();
       }
-    } finally {
-      relaseFunc();
+    } catch (err) {
+      console.error("Failed to aquire liveNewsMutex", err);
     }
   },
 
@@ -124,13 +147,37 @@ const newsBot = {
   // the rawNews array.
   // string newsTitle: Title of the article
   //------------------------------------------------------------------------
-  async addRawNews(newsTitle) {
-    const relaseFunc = await this.queuedNewsMutex.acquire();
+  async addRSSNews(newsTitle) {
+    const relaseFunc = await this.queuedRSSNewsMutex.acquire();
 
     try {
-      this.queuedNews.push(newsTitle);
-    } finally {
-      relaseFunc();
+      try {
+        this.queuedRSSNews.push(newsTitle);
+      } finally {
+        relaseFunc();
+      }
+    } catch (err) {
+      console.error("Failed to aquire queuedRSSNewsMutex", err);
+    }
+  },
+
+  //------------------------------------------------------------------------
+  // Add news from RSS feeds and Alpaca websocket (live news) with mutex to
+  // the rawNews array.
+  // map newsMap: object of news article formatted like this :
+  //              {title: "title", symbols: ["SYM", "BOLS", ...]}
+  //------------------------------------------------------------------------
+  async addWebsocketNews(newsMap) {
+    const relaseFunc = await this.queuedWebsocketNewsMutex.acquire();
+
+    try {
+      try {
+        this.queuedWebsocketNews.push(newsMap);
+      } finally {
+        relaseFunc();
+      }
+    } catch (err) {
+      console.error("Failed to aquire queuedWebsocketNewsMutex", err);
     }
   },
 
@@ -158,11 +205,7 @@ const newsBot = {
     // If pubDate is older than currtime - RSS_REFRESH, then we know that
     // this news from the rss feed has already been seen/processed
     const now = new Date();
-
     const refresh = this.RSS_REFRESH * 60 * 1000;
-    
-    // const refresh = 1440 * 60 * 1000; // TODO: remove when finished testing
-
     let timeDiff = now.getTime() - pubDate;
 
     return timeDiff <= refresh;
@@ -171,7 +214,7 @@ const newsBot = {
   //------------------------------------------------------------------------
   // Find the ticker symbols within an array of text
   // array texts: array of strings to search for organizations
-  // return the list strings of ticker symbols
+  // return the array strings of ticker symbols
   //------------------------------------------------------------------------
   async findTickerSymbols(texts) {
     try {
@@ -179,12 +222,57 @@ const newsBot = {
       const response = await axios.post(queryURL, texts, { httpsAgent: this.HTTPS_AGENT });
       let symbols = response.data["symbols"];
       return symbols;
-      
     } catch (err) {
       console.error("Failed to get list of organizations from ML.py:", err);
     }
 
     return [];
+  },
+
+  //------------------------------------------------------------------------
+  // Use sentiment analysis to analyze array(s) of texts
+  // \param array of arrays of texts: array of array(s) of strings to search for
+  //                           organizations
+  // \return the array of scores for each news. if failed, return an empty
+  // array
+  //------------------------------------------------------------------------
+  async getSentimentAnalysis(texts) {
+    try {
+      let queryURL = `https://localhost:${this.ML_PORT}/analyze`;
+
+      const response = await axios.post(
+        queryURL,
+        { texts: texts },
+        {
+          httpsAgent: this.HTTPS_AGENT,
+        }
+      );
+      console.log(response.data["results"]);
+      return response.data["results"];
+    } catch (err) {
+      console.error("Failed to get sentiment analysis:", err);
+      return [];
+    }
+  },
+
+  //------------------------------------------------------------------------
+  // Ask OpenAI for impact score of current news
+  // array of arrays of texts: array of array(s) of strings to search for
+  //                           organizations
+  // return the list of scores for each news
+  //------------------------------------------------------------------------
+  async askOpenAI(texts) {
+    try {
+      const completion = await this.openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        store: true,
+        messages: [{ role: "user", content: "write a haiku about ai" }],
+      });
+
+      completion.then((result) => console.log(result.choices[0].message));
+    } catch (err) {
+      console.log("Error with OpenAI news processing:", err);
+    }
   },
 
   //------------------------------------------------------------------------
@@ -350,7 +438,7 @@ const newsBot = {
   // Perform sentiment Analysis all news on the stocks. Sends all news
   // in one batch.
   //------------------------------------------------------------------------
-  async getSentimentAnalysis() {
+  async getSentimentAnalysisAllNews() {
     // Create two arrays, one of identifiers and one of value's to run in
     // sentiment analysis. Send as one batch to take advantage of
     // transformers parellel processing and reduce sending request overhead
@@ -369,15 +457,8 @@ const newsBot = {
       }
     }
 
-    let scores = [];
-    try {
-      let queryURL = `https://localhost:${this.ML_PORT}/analyze`;
-
-      const response = await axios.post(queryURL, newsToAnalyze, { httpsAgent: this.HTTPS_AGENT });
-      scores = response.data["analysis"];
-    } catch (err) {
-      console.error("Failed to get sentiment analysis:", err);
-    }
+    let analyzed = await this.getSentimentAnalysis([newsToAnalyze]);
+    let scores = analyzed[0];
 
     // Log a sanity check
     console.log("Ensure the numbers below are the same:");
@@ -415,7 +496,7 @@ const newsBot = {
   async getStockSuggestions(lower, upper) {
     await this.fillStocksList(lower, upper);
     await this.fillStockNews();
-    await this.getSentimentAnalysis();
+    await this.getSentimentAnalysisAllNews();
     return Array.from(this.stocks.values());
   },
 
@@ -423,7 +504,6 @@ const newsBot = {
   // Fetch news from RSS. Populate the array of live news
   //------------------------------------------------------------------------
   async fetchRSS() {
-    console.log(this.liveNews);
     try {
       const feedPromises = this.rssFeedURLs.map((url) => this.rssParser.parseURL(url));
       const feeds = await Promise.all(feedPromises);
@@ -438,7 +518,8 @@ const newsBot = {
           if (this.shouldAddRssFeed(pubDate)) {
             let url = newest["link"];
             let title = newest["title"];
-            await Promise.all([this.addLiveNews(title, url), this.addRawNews(title)]);
+            console.log(title, url);
+            await Promise.all([this.addLiveNews(title, url), this.addRSSNews(title)]);
           }
         } catch (err) {
           console.error("Error with processing RSS feed data: ", err);
@@ -449,8 +530,6 @@ const newsBot = {
     } catch (err) {
       console.error("Error with receiving data from RSS feed: ", err);
     }
-
-    this.processRawNews();
   },
 
   //------------------------------------------------------------------------
@@ -484,11 +563,17 @@ const newsBot = {
         );
       } else if (message.T === "n") {
         this.addLiveNews(message.headline, message.url);
-        for (const symbol in message.symbols) {
-          this.todayStockSet.add(symbol);
+        let involvedTickers = [];
+        for (const symbol of message.symbols) {
+          involvedTickers.push(symbol);
         }
-        console.log(message.headline, message.url);
-        console.log("current symbols: ", this.todayStockSet);
+
+        this.addWebsocketNews({
+          title: message.headline,
+          symbols: involvedTickers,
+        });
+        let currTime = new Date().toISOString();
+        console.log("Web socket:", currTime, message.headline, message.url, involvedTickers);
       } else {
         console.log("Recieved unrecognized data from Alpaca", message);
       }
@@ -504,33 +589,70 @@ const newsBot = {
   },
 
   //------------------------------------------------------------------------
-  // Process the raw news before clearing it
+  // Process the raw news before clearing it. Add potential stock tickers
+  // to todayPotentialStockSet.
   //------------------------------------------------------------------------
   async processRawNews() {
-    const relaseFunc = await this.queuedNewsMutex.acquire();
-    let copyQueuedNews = this.queuedNews;
-    this.queuedNews = [];
-    relaseFunc();
+    // Create a copy of news to prevent holding onto the lock
+    const relaseFuncRSS = await this.queuedRSSNewsMutex.acquire();
+    let rssNewsForProcess = this.queuedRSSNews;
+    this.queuedRSSNews = [];
+    relaseFuncRSS();
 
+    const relaseFuncWebsocket = await this.queuedWebsocketNewsMutex.acquire();
+    let copyWebsocketNews = this.queuedWebsocketNews;
+    this.queuedWebsocketNews = [];
+    relaseFuncWebsocket();
+
+    // Get the sentiment analysis scores
+    let websocketNewsForProcess = [];
+    for (let i = 0; i < copyWebsocketNews.length; ++i) {
+      websocketNewsForProcess.push(copyWebsocketNews[i]["title"]);
+    }
+
+    // TODO: need to find way to kill/prevent this process if ML.py is not up
+    let scores = await this.getSentimentAnalysis([rssNewsForProcess, websocketNewsForProcess]);
+
+    if (scores.length == 0) {
+      console.log("Analysis API is down");
+      return;
+    }
+    // Filter for RSS news worth processing more. Add good websocket news symbol to set
+    let rssScores = scores[0];
+    let wsScores = scores[1];
+    let processMoreRSS = [];
+
+    for (let i = 0; i < rssScores.length; ++i) {
+      if (rssScores[i] >= 0.75) {
+        processMoreRSS.push(rssNewsForProcess[i]);
+      }
+    }
+    for (let i = 0; i < wsScores.length; ++i) {
+      if (wsScores[i] >= 0.75) {
+        for (let symbol of copyWebsocketNews[i]["symbols"]) {
+          this.todayPotentialStockSet.add(symbol);
+        }
+      }
+    }
+
+    // Check list to remove part of sentence after special character "&#""
+    // This only happens in RSS news
     try {
-      // Check list to remove part of sentence after special character "&#""
-      for (let i = 0; i < copyQueuedNews.length; ++i) {
-        let specialIndex = copyQueuedNews[i].indexOf("&#");
+      for (let i = 0; i < processMoreRSS.length; ++i) {
+        let specialIndex = processMoreRSS[i].indexOf("&#");
         if (specialIndex !== -1) {
-          this.containsSpecial.push(copyQueuedNews[i]);
-          copyQueuedNews[i] = copyQueuedNews[i].substring(0, specialIndex);
+          this.containsSpecial.push(processMoreRSS[i]);
+          processMoreRSS[i] = processMoreRSS[i].substring(0, specialIndex);
           console.log("SPECIAL CHARACTERS DETECTED", this.containsSpecial);
         }
       }
-
-      let orgs = await this.findTickerSymbols(copyQueuedNews);
-      for (const org of orgs) {
-        this.todayStockSet.add(org);
-      }
-
-      console.log("curent symbols: ", this.todayStockSet);
     } catch (err) {
       console.error("Error with processing news", err);
+    }
+
+    let orgs = await this.findTickerSymbols(processMoreRSS);
+    for (const org of orgs) {
+      this.todayPotentialStockSet.add(org);
     }
   },
 };

@@ -39,29 +39,40 @@ app = Flask(__name__)
 
 
 # ------------------------------------------------------------------------
-# Perform sentiment Analysis all news on the stocks in parallel
+# Perform sentiment Analysis in parallel
+# \param texts: list of list of texts 
 # ------------------------------------------------------------------------
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    data = request.json
-
+    params = request.json
+    text_list = params.get("texts")
+    
+    # Keep track of how many items are in each list to restore them
+    data_to_process = [] # Combined list of all texts to process
+    num_text = [] # List to hold how many text are in each list
+    for texts in text_list:
+        num_text.append(len(texts))
+        data_to_process.extend(texts)
+    
     analysis = []
-    if data:
+    if data_to_process:
         # Divide into smaller batches to avoid memory issues
         try:
-            results = finbert_sentiment_pipeline(data, batch_size=BATCH_SIZE)
+            results = finbert_sentiment_pipeline(data_to_process, batch_size=BATCH_SIZE)
 
             for value in results:
-                label = value["label"]
+                label, score = value["label"], value["score"]
                 determination = 0
 
                 # Accept sentiment anlysis is Positive or Negative
                 # if the probability is not too close to call
                 # if not (QUESTIONABLE_LOWER <= score <= QUESTIONABLE_UPPER):
                 if label == "Positive":
-                    determination = 1
+                    determination = score
                 elif label == "Negative":
                     determination = -1
+                else:
+                    determination = 0
 
                 analysis.append(determination)
 
@@ -69,10 +80,14 @@ def analyze():
             print(f"Batch size before error: {BATCH_SIZE}")
             print("Error:", err)
 
-    # TODO: could try removing everything after verb to get majority of cases
-    # TODO: could also use fuzzy match to see if stock name from yahoo news
-    # kinda matches resulting text
-    return {"analysis": analysis}
+    # Return the scores in their respecive lists
+    results = []
+    curr_ind = 0
+    for count in num_text:
+        results.append(analysis[curr_ind : curr_ind + count])
+        curr_ind += count
+        
+    return {"results": results}
 
 
 # ------------------------------------------------------------------------
@@ -83,7 +98,7 @@ def findOrgs():
     texts = request.json
     org_names = set()
     num_cores = 1 if (PROCESSOR == 0) else AVAILABLE_CORES
-    batch_size = 256 if (PROCESSOR == 0) else 50
+    batch_size = 256 if (PROCESSOR == 0) else 16
 
     # Find with spacy
     try:
@@ -107,7 +122,9 @@ def findOrgs():
         except Exception as e:
             print(f"Error searching for ticker symbol for {org}: {e}")
             
-        
+    # TODO: could try removing everything after verb to get majority of cases
+    # TODO: could also use fuzzy match to see if stock name from yahoo news
+    # kinda matches resulting text
     return {"symbols": ticker_symbols}
 
 
@@ -118,5 +135,5 @@ if __name__ == "__main__":
     app.run(
         debug=False,
         port=REQUEST_PORT,
-        ssl_context=("../cert/cert.pem", "../cert/key.pem"),
+        ssl_context=("../../cert/cert.pem", "../../cert/key.pem"),
     )
