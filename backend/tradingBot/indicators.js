@@ -2,6 +2,10 @@ import tulind from "tulind";
 import { promisify } from "util";
 
 //------------------------------------------------------------------------
+// Purpose: puts indicators generated from tulind in a common format
+//------------------------------------------------------------------------
+
+//------------------------------------------------------------------------
 // Calcualte the Average True Range (ATR)
 // \param array hlc: array of array of[ hight, low, close ] data
 // \param array period: period to calculate ATR

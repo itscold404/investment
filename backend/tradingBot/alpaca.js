@@ -1,7 +1,6 @@
 import Alpaca from "@alpacahq/alpaca-trade-api";
 import dotevn from "dotenv";
 import axios from "axios";
-import * as indicators from "./indicators.js";
 
 dotevn.config({ path: "../../.env" });
 
@@ -10,7 +9,6 @@ dotevn.config({ path: "../../.env" });
 //------------------------------------------------------------------------
 const IS_PAPER_TRADING = true;
 const PAPER_API = process.env.ALPACA_PAPER_API_KEY;
-// const PAPER_API = 1;
 const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
 
 //------------------------------------------------------------------------

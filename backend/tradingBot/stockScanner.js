@@ -1,5 +1,7 @@
-import * as indicators from "./indicators.js";
 import * as alpaca from "./alpaca.js";
+import axios from "axios";
+import https from "https";
+import { certLocation } from "../certs.js";
 import fs from "fs";
 import {
   adxFilter,
@@ -11,15 +13,16 @@ import {
   volumeFilter,
 } from "./filterHelper.js";
 
-// Conditions to filter by
-const CONDITIONS = {
-  VOLUME: "volume",
-  SPREAD: "spread",
-  PRICE: "price",
-  EMA: "ema",
-  ADX: "adx",
-  MACD: "macd",
-};
+//------------------------------------------------------------------------
+// Purpose: Script to constantly run and scan for suitable stocks to buy.
+// This is the main way for the master script to know what stocks to buy
+//------------------------------------------------------------------------
+
+//------------------------------------------------------------------------
+// Constants and Globals
+//------------------------------------------------------------------------
+const MASTER_PORT = process.env.MASTER_PORT;
+const HTTPS_AGENT = new https.Agent({ ca: fs.readFileSync(certLocation) });
 
 //------------------------------------------------------------------------
 // Determine if the stock's today's volume is volatile compared to the
@@ -123,7 +126,7 @@ async function getPotentialTickers() {
 
   // Write the resulting string to a text file
   const text = filteredVolume.join("\n");
-  fs.writeFile("stockList.txt", text, (err) => {
+  fs.writeFile("../../data/stockList.txt", text, (err) => {
     if (err) {
       console.error("Error writing file:", err);
     } else {
@@ -209,12 +212,33 @@ async function findSuitableTickers(tickers) {
   let filteredByEMA = await filterBy(filteredBySpread, emaFilter, "EMA");
   let filteredByADX = await filterBy(filteredByEMA, adxFilter, "ADX");
   let filteredByMACD = await filterBy(filteredByADX, macdFilter, "MACD");
+  // require (ATR / Price) > X% (like 2–3%) for profit. if ATR is too low don't trade it
 
   return filteredByMACD;
 }
 
 //------------------------------------------------------------------------
-// Main stock scanner logic
+// Send object to the master
+// \param any data: the data to send to the master
+// \param string name: the name for the data to send to the master. Used
+// as the field name of the object sent to the master
+//------------------------------------------------------------------------
+async function sendDataToMaster(data, name) {
+  if (!data || !name) return;
+
+  let mail = {};
+  mail[name] = data;
+  try {
+    let queryURL = `https://localhost:${MASTER_PORT}/updateTickers`;
+    await axios.put(queryURL, mail, { httpsAgent: HTTPS_AGENT });
+  } catch (err) {
+    console.error("Failed to send data to master:", err);
+  }
+}
+
+//------------------------------------------------------------------------
+// Main stock scanner logic:
+// Filter stocks and send stocks to the master
 //------------------------------------------------------------------------
 const accountInfo = await alpaca.getAccountInfo(); // Account information
 const TICKERS = await getPotentialTickers(); // Potential tickers of stocks to trade
@@ -230,7 +254,6 @@ if (accountInfo === null || TICKERS === null) {
 console.log(accountCash);
 
 setInterval(async () => {
-  potentialTickers = findSuitableTickers(TICKERS);
+  potentialTickers = await findSuitableTickers(TICKERS);
+  sendDataToMaster(potentialTickers, "potentialTickers");
 }, REFRESH_SECONDS * 1000);
-
-// require (ATR / Price) > X% (like 2–3%) for profit. if ATR is too low don't trade it

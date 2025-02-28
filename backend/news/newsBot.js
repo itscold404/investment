@@ -8,6 +8,7 @@ import Parser from "rss-parser";
 import WebSocket from "ws";
 import { Mutex } from "async-mutex";
 import OpenAI from "openai";
+import { certLocation } from "../certs.js";
 
 dotevn.config({ path: "../../.env" });
 
@@ -30,7 +31,8 @@ const newsBot = {
   ALPACA_WEBSOCKET_NEWS_URL: "wss://stream.data.alpaca.markets/v1beta1/news",
 
   // URL for Alpaca's websocket news
-  ALPACA_WEBSOCKET_TEST_NEWS_URL: "wss://stream.data.sandbox.alpaca.markets/v1beta1/news",
+  ALPACA_WEBSOCKET_TEST_NEWS_URL:
+    "wss://stream.data.sandbox.alpaca.markets/v1beta1/news",
 
   // Number of news in liveNews before removing old news
   LIVE_NEWS_ARRAY_LIMIT: 100,
@@ -44,7 +46,7 @@ const newsBot = {
 
   // Cert for HTTPS communication
   HTTPS_AGENT: new https.Agent({
-    ca: fs.readFileSync("../../cert/cert.pem"),
+    ca: fs.readFileSync(certLocation),
   }),
 
   // OpenAI
@@ -219,7 +221,9 @@ const newsBot = {
   async findTickerSymbols(texts) {
     try {
       let queryURL = `https://localhost:${this.ML_PORT}/findTickers`;
-      const response = await axios.post(queryURL, texts, { httpsAgent: this.HTTPS_AGENT });
+      const response = await axios.post(queryURL, texts, {
+        httpsAgent: this.HTTPS_AGENT,
+      });
       let symbols = response.data["symbols"];
       return symbols;
     } catch (err) {
@@ -334,7 +338,9 @@ const newsBot = {
               if (newsArticle.hasOwnProperty("insights")) {
                 newsArticle.insights.forEach((insight) => {
                   if (insight.ticker === key) {
-                    descr = descr.concat(" ").concat(insight.sentiment_reasoning);
+                    descr = descr
+                      .concat(" ")
+                      .concat(insight.sentiment_reasoning);
                   }
                 });
               }
@@ -372,7 +378,10 @@ const newsBot = {
       stockBatch.push(key);
 
       // Send API calls in batches or if this is the last stock in the list
-      if (numStocks % this.STOCK_PER_REQUEST_PATCH === 0 || numStocks === this.stocks.size) {
+      if (
+        numStocks % this.STOCK_PER_REQUEST_PATCH === 0 ||
+        numStocks === this.stocks.size
+      ) {
         let symbols = stockBatch.join(",");
 
         console.log("Requesting news on batch:", symbols);
@@ -394,7 +403,10 @@ const newsBot = {
             articleCount += 1;
             findMax += 1;
             newsArticle.symbols.forEach((ticker) => {
-              if (this.stocks.has(ticker) && !this.stocks.get(ticker).news.has(newsArticle.url)) {
+              if (
+                this.stocks.has(ticker) &&
+                !this.stocks.get(ticker).news.has(newsArticle.url)
+              ) {
                 let newNews = new Map();
                 newNews.set("date", newsArticle.created_at);
                 newNews.set("title", newsArticle.headline);
@@ -428,9 +440,15 @@ const newsBot = {
 
     console.log("**Alpaca has a limit of 50 articles per page**");
     console.log("This iteration:");
-    console.log("       Stocks per batch request:", this.STOCK_PER_REQUEST_PATCH);
+    console.log(
+      "       Stocks per batch request:",
+      this.STOCK_PER_REQUEST_PATCH
+    );
     console.log("       Number of stocks:", numStocks);
-    console.log("       Average articles per page:", articleCount / numBatchesSent);
+    console.log(
+      "       Average articles per page:",
+      articleCount / numBatchesSent
+    );
     console.log("       Max articles per page:", maxArticles);
   },
 
@@ -462,9 +480,15 @@ const newsBot = {
 
     // Log a sanity check
     console.log("Ensure the numbers below are the same:");
-    console.log("       Number of news sent to be processed:", newsToAnalyze.length);
+    console.log(
+      "       Number of news sent to be processed:",
+      newsToAnalyze.length
+    );
     console.log("       Number of ids created", id.length);
-    console.log("       Number of scores returned from processing", scores.length);
+    console.log(
+      "       Number of scores returned from processing",
+      scores.length
+    );
 
     // Populate our map of all stocks with the analysis results
     if (scores.length === id.length && scores.length === newsToAnalyze.length) {
@@ -484,7 +508,9 @@ const newsBot = {
         this.stocks.get(symbol).sentScore += analysisScore;
       }
     } else {
-      console.error("LENGTH OF SCORES FROM SENTIMENT ANALYSIS DOES NOT MATCH LENGTH OF ID'S");
+      console.error(
+        "LENGTH OF SCORES FROM SENTIMENT ANALYSIS DOES NOT MATCH LENGTH OF ID'S"
+      );
     }
   },
 
@@ -505,7 +531,9 @@ const newsBot = {
   //------------------------------------------------------------------------
   async fetchRSS() {
     try {
-      const feedPromises = this.rssFeedURLs.map((url) => this.rssParser.parseURL(url));
+      const feedPromises = this.rssFeedURLs.map((url) =>
+        this.rssParser.parseURL(url)
+      );
       const feeds = await Promise.all(feedPromises);
 
       const rssFeedsPromises = feeds.map(async (feed) => {
@@ -519,7 +547,10 @@ const newsBot = {
             let url = newest["link"];
             let title = newest["title"];
             console.log(title, url);
-            await Promise.all([this.addLiveNews(title, url), this.addRSSNews(title)]);
+            await Promise.all([
+              this.addLiveNews(title, url),
+              this.addRSSNews(title),
+            ]);
           }
         } catch (err) {
           console.error("Error with processing RSS feed data: ", err);
@@ -573,7 +604,13 @@ const newsBot = {
           symbols: involvedTickers,
         });
         let currTime = new Date().toISOString();
-        console.log("Web socket:", currTime, message.headline, message.url, involvedTickers);
+        console.log(
+          "Web socket:",
+          currTime,
+          message.headline,
+          message.url,
+          involvedTickers
+        );
       } else {
         console.log("Recieved unrecognized data from Alpaca", message);
       }
@@ -611,7 +648,10 @@ const newsBot = {
     }
 
     // TODO: need to find way to kill/prevent this process if ML.py is not up
-    let scores = await this.getSentimentAnalysis([rssNewsForProcess, websocketNewsForProcess]);
+    let scores = await this.getSentimentAnalysis([
+      rssNewsForProcess,
+      websocketNewsForProcess,
+    ]);
 
     if (scores.length == 0) {
       console.log("Analysis API is down");

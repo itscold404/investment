@@ -5,8 +5,9 @@ import cors from "cors";
 import newsBot from "./newsBot.js";
 import https from "https";
 import fs from "fs";
+import { keyLocation, certLocation } from "../certs.js";
 
-dotevn.config({ path: "../.env" });
+dotevn.config({ path: "../../.env" });
 
 //------------------------------------------------------------------------
 // Constants and Globals
@@ -36,8 +37,8 @@ backend
   .use(express.json());
 
 let options = {
-  key: fs.readFileSync("../../cert/key.pem"),
-  cert: fs.readFileSync("../../cert/cert.pem"),
+  key: fs.readFileSync(keyLocation),
+  cert: fs.readFileSync(certLocation),
 };
 
 https.createServer(options, backend).listen(BACKEND_PORT, () => {
