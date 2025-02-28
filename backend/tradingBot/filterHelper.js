@@ -3,6 +3,11 @@ import * as indicators from "./indicators.js";
 import { linearRegression } from "simple-statistics";
 
 //------------------------------------------------------------------------
+// Purpose: settings for stock indicaticators and helper for filtering
+// stocks
+//------------------------------------------------------------------------
+
+//------------------------------------------------------------------------
 // Price filter constants
 //------------------------------------------------------------------------
 const LOWEST_PRICE = 10; // Lowest price of a stock we will buy
@@ -269,7 +274,6 @@ async function filterWithMacd(data) {
   let closingPrices = data.c;
   let macd = await indicators.getMACD(closingPrices, MACD_PERIOD);
 
-  console.log(macd);
   if (!macd) return false;
   if (macd.macdLine.length < 3 || macd.histogram.length < 3) return false; // can I check either one or both lengths?
 
