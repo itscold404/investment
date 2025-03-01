@@ -3,12 +3,12 @@ import express from "express";
 import fs from "fs";
 import worker from "worker_threads";
 import https from "https";
-import { keyLocation, certLocation } from "../certs.js";
+import { keyLocation, certLocation } from "../util/certs.js";
 dotevn.config({ path: "../../.env" });
 
-//------------------------------------------------------------------------
+//========================================================================
 // Purpose: Buys suitable stocks and assigns workers to manage the stock
-//------------------------------------------------------------------------
+//========================================================================
 
 //------------------------------------------------------------------------
 // Constants and Globals

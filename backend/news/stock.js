@@ -1,3 +1,7 @@
+//=======================================================================
+// Purpose: a stock object
+//=======================================================================
+
 class Stock {
   symbol = "";
   dayPercentChange = 0; // Percent change of stock today

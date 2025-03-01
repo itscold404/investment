@@ -1,8 +1,12 @@
 import Alpaca from "@alpacahq/alpaca-trade-api";
 import dotevn from "dotenv";
-import axios from "axios";
+import { alpacaGET } from "./httpUtil.js";
 
 dotevn.config({ path: "../../.env" });
+
+//========================================================================
+// Purpose: standardize data fetched from Alpaca
+//========================================================================
 
 //------------------------------------------------------------------------
 // Constants and Globals
@@ -14,7 +18,7 @@ const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
 //------------------------------------------------------------------------
 // Setup and connections
 //------------------------------------------------------------------------
-const alpacaPaper = new Alpaca({
+const alpaca = new Alpaca({
   keyId: PAPER_API,
   secretKey: PAPER_SECRET,
   paper: IS_PAPER_TRADING,
@@ -25,7 +29,7 @@ const alpacaPaper = new Alpaca({
 // \return alpaca account infomation
 //------------------------------------------------------------------------
 async function getAccountInfo() {
-  const account = await alpacaPaper
+  const account = await alpaca
     .getAccount()
     .then((account) => {
       return account;
@@ -44,7 +48,7 @@ async function getAccountInfo() {
 // \return a array of ticker symbols as strings
 //------------------------------------------------------------------------
 async function getAssets() {
-  const assets = await alpacaPaper
+  const assets = await alpaca
     .getAssets({
       status: "active",
       exchange: "NYSE,NASDAQ,ARCA,BATS",
@@ -77,7 +81,7 @@ async function getAssets() {
 //------------------------------------------------------------------------
 function marketBuy(tickerSymbol, qty = 5) {
   // TODO: figure out how to take advantage of client_order_id param
-  alpacaPaper
+  alpaca
     .createOrder({
       symbol: tickerSymbol, // any valid ticker symbol
       qty: qty,
@@ -98,7 +102,7 @@ function marketBuy(tickerSymbol, qty = 5) {
 // \param bool sellAll: if you want to sell all stocks
 //------------------------------------------------------------------------
 function marketSell(tickerSymbol, qty = 5, sellAll = false) {
-  alpacaPaper
+  alpaca
     .createOrder({
       symbol: tickerSymbol,
       qty: qty,
@@ -167,10 +171,6 @@ async function getHistoricalData(symbols, params) {
 
   try {
     let queryURL = "https://data.alpaca.markets/v2/stocks/bars";
-    let headers = {
-      "APCA-API-KEY-ID": PAPER_API,
-      "APCA-API-SECRET-KEY": PAPER_SECRET,
-    };
     let params = {
       symbols: tickersString,
       timeframe: barSize,
@@ -178,7 +178,8 @@ async function getHistoricalData(symbols, params) {
       sort: "asc",
       limit: 10000,
     };
-    const response = await axios.get(queryURL, { headers, params });
+    const response = await alpacaGET(queryURL, params);
+    if (!response) return null;
     const data = response.data.bars;
 
     let res = {};
@@ -234,14 +235,11 @@ async function getLatestClosingPrice(symbols, param) {
 
   try {
     let queryURL = "https://data.alpaca.markets/v2/stocks/bars/latest";
-    let headers = {
-      "APCA-API-KEY-ID": PAPER_API,
-      "APCA-API-SECRET-KEY": PAPER_SECRET,
-    };
     let params = {
       symbols: tickersString,
     };
-    const response = await axios.get(queryURL, { headers, params });
+    const response = await alpacaGET(queryURL, params);
+    if (!response) return null;
     let data = response.data.bars;
 
     let res = {};
@@ -289,14 +287,11 @@ async function getLatestQuote(symbols, params) {
 
   try {
     let queryURL = "https://data.alpaca.markets/v2/stocks/quotes/latest";
-    let headers = {
-      "APCA-API-KEY-ID": PAPER_API,
-      "APCA-API-SECRET-KEY": PAPER_SECRET,
-    };
     let params = {
       symbols: tickersString,
     };
-    const response = await axios.get(queryURL, { headers, params });
+    const response = await alpacaGET(queryURL, params);
+    if (!response) return null;
     let data = response.data.quotes;
 
     let res = {};
@@ -319,34 +314,8 @@ async function getLatestQuote(symbols, params) {
 
 // marketBuy("TSLA", 100);
 
-//------------------------------------------------------------------------
-// Example Usage
-//------------------------------------------------------------------------
-// let res = await indicators.getHistoricalData(
-//   ["TSLA", "ABAT"],
-//   ["h", "l", "c", "v"],
-//   "1Min",
-//   48
-// );
-
-// console.log(res);
-
-// // console.log(res);
-// let dataHLC = [res["h"], res["l"], res["c"]];
-// let dataC = res["c"];
-
-// if (!res["error"] && res["h"] && res["l"] && res["c"]) {
-//   let atr = await indicators.getATR(dataHLC, [14]);
-//   let macd = await indicators.getMACD(dataC, [16, 26, 12]);
-//   let ema = await indicators.getEMA(dataC, [20]);
-//   let adx = await indicators.getADX(dataHLC, [14]);
-//   // console.log(atr);
-//   // console.log(macd);
-//   // console.log(ema);
-//   // console.log(adx);
-// }
-
 export {
+  alpaca,
   getAccountInfo,
   marketBuy,
   marketSell,

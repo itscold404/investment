@@ -1,11 +1,11 @@
-import * as alpaca from "./alpaca.js";
+import * as alpaca from "../util/alpaca.js";
 import * as indicators from "./indicators.js";
 import { linearRegression } from "simple-statistics";
 
-//------------------------------------------------------------------------
+//========================================================================
 // Purpose: settings for stock indicaticators and helper for filtering
 // stocks
-//------------------------------------------------------------------------
+//========================================================================
 
 //------------------------------------------------------------------------
 // Price filter constants
@@ -94,7 +94,7 @@ const volumeFilter = new FilterParams(
 volumeFilter.dataGetterParam = {
   dataType: ["v"],
   barSize: "15Min",
-  lookBackHours: 6, // TODO: CHANGE TO .5 WHEN DONE TESTING
+  lookBackHours: 30, // TODO: CHANGE TO .5 WHEN DONE TESTING
 };
 
 //------------------------------------------------------------------------
@@ -113,7 +113,7 @@ const emaFilter = new FilterParams(alpaca.getHistoricalData, filterWithEma, 40);
 emaFilter.dataGetterParam = {
   dataType: ["c"],
   barSize: "5Min",
-  lookBackHours: 7, // TODO: CHANGE TO 2 WHEN DONE TESTING
+  lookBackHours: 30, // TODO: CHANGE TO 2 WHEN DONE TESTING
 };
 
 //------------------------------------------------------------------------
@@ -123,7 +123,7 @@ const adxFilter = new FilterParams(alpaca.getHistoricalData, filterWithAdx, 40);
 adxFilter.dataGetterParam = {
   dataType: ["h", "l", "c"],
   barSize: "15Min",
-  lookBackHours: 10, // TODO: CHANGE TO 4 WHEN DONE TESTING
+  lookBackHours: 30, // TODO: CHANGE TO 4 WHEN DONE TESTING
 };
 
 //------------------------------------------------------------------------
@@ -137,7 +137,7 @@ const macdFilter = new FilterParams(
 macdFilter.dataGetterParam = {
   dataType: ["c"],
   barSize: "5Min",
-  lookBackHours: 9, // TODO: CHANGE TO 3 WHEN DONE TESTING
+  lookBackHours: 30, // TODO: CHANGE TO 3 WHEN DONE TESTING
 };
 
 //------------------------------------------------------------------------

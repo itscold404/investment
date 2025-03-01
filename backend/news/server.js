@@ -1,32 +1,27 @@
-import Alpaca from "@alpacahq/alpaca-trade-api";
+import { alpaca } from "../util/alpaca.js";
 import dotevn from "dotenv";
 import express from "express";
 import cors from "cors";
 import newsBot from "./newsBot.js";
 import https from "https";
 import fs from "fs";
-import { keyLocation, certLocation } from "../certs.js";
+import { keyLocation, certLocation } from "../util/certs.js";
 
 dotevn.config({ path: "../../.env" });
+
+//========================================================================
+// Purpose: server for news
+//========================================================================
 
 //------------------------------------------------------------------------
 // Constants and Globals
 //------------------------------------------------------------------------
-var isPaperTrading = true;
 const BACKEND_PORT = process.env.VITE_BACKEND_PORT;
 const FRONT_PORT = process.env.FRONT_END_PORT;
-const PAPER_API = process.env.ALPACA_PAPER_API_KEY;
-const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
 
 //------------------------------------------------------------------------
 // Setup and connections
 //------------------------------------------------------------------------
-const alpacaPaper = new Alpaca({
-  keyId: PAPER_API,
-  secretKey: PAPER_SECRET,
-  paper: true,
-});
-
 const backend = express();
 backend
   .use(
@@ -67,12 +62,8 @@ function translate_error(err) {
 //------------------------------------------------------------------------
 backend.get("/test/printAccount", async (req, res) => {
   try {
-    if (isPaperTrading) {
-      const account = await alpacaPaper.getAccount();
-      console.log(account);
-    } else {
-      // TODO: set up non-paper trading
-    }
+    const account = await alpaca.getAccount();
+    console.log(account);
     console.log("*******************************");
     console.log("*** SERVER CONNECTION VALID ***");
     console.log("*******************************");

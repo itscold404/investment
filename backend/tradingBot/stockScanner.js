@@ -1,8 +1,6 @@
-import * as alpaca from "./alpaca.js";
-import axios from "axios";
-import https from "https";
-import { certLocation } from "../certs.js";
+import * as alpaca from "../util/alpaca.js";
 import fs from "fs";
+import { httpPUT } from "../util/httpUtil.js";
 import {
   adxFilter,
   dailyVolumeFilter,
@@ -13,16 +11,15 @@ import {
   volumeFilter,
 } from "./filterHelper.js";
 
-//------------------------------------------------------------------------
+//========================================================================
 // Purpose: Script to constantly run and scan for suitable stocks to buy.
 // This is the main way for the master script to know what stocks to buy
-//------------------------------------------------------------------------
+//========================================================================
 
 //------------------------------------------------------------------------
 // Constants and Globals
 //------------------------------------------------------------------------
 const MASTER_PORT = process.env.MASTER_PORT;
-const HTTPS_AGENT = new https.Agent({ ca: fs.readFileSync(certLocation) });
 
 //------------------------------------------------------------------------
 // Determine if the stock's today's volume is volatile compared to the
@@ -218,25 +215,6 @@ async function findSuitableTickers(tickers) {
 }
 
 //------------------------------------------------------------------------
-// Send object to the master
-// \param any data: the data to send to the master
-// \param string name: the name for the data to send to the master. Used
-// as the field name of the object sent to the master
-//------------------------------------------------------------------------
-async function sendDataToMaster(data, name) {
-  if (!data || !name) return;
-
-  let mail = {};
-  mail[name] = data;
-  try {
-    let queryURL = `https://localhost:${MASTER_PORT}/updateTickers`;
-    await axios.put(queryURL, mail, { httpsAgent: HTTPS_AGENT });
-  } catch (err) {
-    console.error("Failed to send data to master:", err);
-  }
-}
-
-//------------------------------------------------------------------------
 // Main stock scanner logic:
 // Filter stocks and send stocks to the master
 //------------------------------------------------------------------------
@@ -255,5 +233,9 @@ console.log(accountCash);
 
 setInterval(async () => {
   potentialTickers = await findSuitableTickers(TICKERS);
-  sendDataToMaster(potentialTickers, "potentialTickers");
+  httpPUT(
+    `https://localhost:${MASTER_PORT}/updateTickers`,
+    [potentialTickers],
+    ["potentialTickers"]
+  );
 }, REFRESH_SECONDS * 1000);

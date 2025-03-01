@@ -1,5 +1,4 @@
 import rssFeedURLs from "../../data/rss_URLs.js";
-import axios from "axios";
 import dotevn from "dotenv";
 import Stock from "./stock.js";
 import https from "https";
@@ -8,9 +7,14 @@ import Parser from "rss-parser";
 import WebSocket from "ws";
 import { Mutex } from "async-mutex";
 import OpenAI from "openai";
-import { certLocation } from "../certs.js";
+import { httpGET, httpPOST, alpacaGET } from "../util/httpUtil.js";
+import { certLocation } from "../util/certs.js";
 
 dotevn.config({ path: "../../.env" });
+
+//==========================================================================
+// Purpose: helper class for getting and processing news
+//==========================================================================
 
 const newsBot = {
   //------------------------------------------------------------------------
@@ -105,13 +109,13 @@ const newsBot = {
     // Get news through RSS Feeds, but make a call on program startup
     this.fetchRSS();
     setInterval(async () => {
-      this.fetchRSS();
+      await this.fetchRSS();
     }, this.RSS_REFRESH * 60 * 1000);
 
     // Process all news every 30 seconds
     let rateAllNewsTime = 0.5;
     setInterval(async () => {
-      this.processRawNews();
+      await this.processRawNews();
     }, rateAllNewsTime * 60 * 1000);
 
     // Start getting news from Alpaca websocket
@@ -151,7 +155,6 @@ const newsBot = {
   //------------------------------------------------------------------------
   async addRSSNews(newsTitle) {
     const relaseFunc = await this.queuedRSSNewsMutex.acquire();
-
     try {
       try {
         this.queuedRSSNews.push(newsTitle);
@@ -214,52 +217,6 @@ const newsBot = {
   },
 
   //------------------------------------------------------------------------
-  // Find the ticker symbols within an array of text
-  // array texts: array of strings to search for organizations
-  // return the array strings of ticker symbols
-  //------------------------------------------------------------------------
-  async findTickerSymbols(texts) {
-    try {
-      let queryURL = `https://localhost:${this.ML_PORT}/findTickers`;
-      const response = await axios.post(queryURL, texts, {
-        httpsAgent: this.HTTPS_AGENT,
-      });
-      let symbols = response.data["symbols"];
-      return symbols;
-    } catch (err) {
-      console.error("Failed to get list of organizations from ML.py:", err);
-    }
-
-    return [];
-  },
-
-  //------------------------------------------------------------------------
-  // Use sentiment analysis to analyze array(s) of texts
-  // \param array of arrays of texts: array of array(s) of strings to search for
-  //                           organizations
-  // \return the array of scores for each news. if failed, return an empty
-  // array
-  //------------------------------------------------------------------------
-  async getSentimentAnalysis(texts) {
-    try {
-      let queryURL = `https://localhost:${this.ML_PORT}/analyze`;
-
-      const response = await axios.post(
-        queryURL,
-        { texts: texts },
-        {
-          httpsAgent: this.HTTPS_AGENT,
-        }
-      );
-      console.log(response.data["results"]);
-      return response.data["results"];
-    } catch (err) {
-      console.error("Failed to get sentiment analysis:", err);
-      return [];
-    }
-  },
-
-  //------------------------------------------------------------------------
   // Ask OpenAI for impact score of current news
   // array of arrays of texts: array of array(s) of strings to search for
   //                           organizations
@@ -291,21 +248,19 @@ const newsBot = {
     // let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=PAYC&apiKey=${this.POLYGON_API_KEY}`;
 
     console.log(lowerBound, upperBound);
-    try {
-      const response = await axios.get(queryURL);
-      const allStocks = response.data.tickers;
 
-      allStocks.forEach((s) => {
-        let percentChange = s.todaysChangePerc;
-        let lastMarketPrice = s.min.c;
-        if (lowerBound < percentChange && percentChange < upperBound) {
-          let stock = new Stock(s.ticker, percentChange, lastMarketPrice);
-          this.stocks.set(s.ticker, stock);
-        }
-      });
-    } catch (err) {
-      console.error("Error querying Polygon.io to get stock symbols:", err);
-    }
+    const response = await httpGET(queryURL);
+    if (!response) return;
+    const allStocks = response.data.tickers;
+
+    allStocks.forEach((s) => {
+      let percentChange = s.todaysChangePerc;
+      let lastMarketPrice = s.min.c;
+      if (lowerBound < percentChange && percentChange < upperBound) {
+        let stock = new Stock(s.ticker, percentChange, lastMarketPrice);
+        this.stocks.set(s.ticker, stock);
+      }
+    });
   },
 
   //------------------------------------------------------------------------
@@ -319,39 +274,34 @@ const newsBot = {
     if (this.ENABLE_POLYGON_API) {
       console.log("Requesting news from Polygon.io... this may take a bit...");
       for (const [key, value] of this.stocks) {
-        try {
-          // use ".gte" after "utc" for articles on and after the date or ".lte" for on and before
-          let queryURL = `${this.POLYGON_BASE_URL}/v2/reference/news?ticker=${key}&order=desc&limit=${this.ARTICLE_LIMIT_PER_CALL}&sort=published_utc&apiKey=${this.POLYGON_API_KEY}`;
-          const response = await axios.get(queryURL);
-          const news = response.data;
+        // use ".gte" after "utc" for articles on and after the date or ".lte" for on and before
+        let queryURL = `${this.POLYGON_BASE_URL}/v2/reference/news?ticker=${key}&order=desc&limit=${this.ARTICLE_LIMIT_PER_CALL}&sort=published_utc&apiKey=${this.POLYGON_API_KEY}`;
+        const response = await httpGET(queryURL);
+        if (!response) return;
+        const news = response.data.results;
 
-          news.results.forEach((newsArticle) => {
-            // Only add relevant news
-            if (this.withinRelevantDate(newsArticle.published_utc)) {
-              let newsMap = new Map();
-              newsMap.set("date", newsArticle.published_utc);
-              newsMap.set("title", newsArticle.title);
+        news.forEach((newsArticle) => {
+          // Only add relevant news
+          if (this.withinRelevantDate(newsArticle.published_utc)) {
+            let newsMap = new Map();
+            newsMap.set("date", newsArticle.published_utc);
+            newsMap.set("title", newsArticle.title);
 
-              // For Polygon.io, get the sentiment reasoning for this stock, if it
-              // exists, and add it to the description
-              let descr = newsArticle.description;
-              if (newsArticle.hasOwnProperty("insights")) {
-                newsArticle.insights.forEach((insight) => {
-                  if (insight.ticker === key) {
-                    descr = descr
-                      .concat(" ")
-                      .concat(insight.sentiment_reasoning);
-                  }
-                });
-              }
-              newsMap.set("description", descr);
-              value.news.set(newsArticle.article_url, newsMap);
-              this.stocks.get(key).numNews += 1;
+            // For Polygon.io, get the sentiment reasoning for this stock, if it
+            // exists, and add it to the description
+            let descr = newsArticle.description;
+            if (newsArticle.hasOwnProperty("insights")) {
+              newsArticle.insights.forEach((insight) => {
+                if (insight.ticker === key) {
+                  descr = descr.concat(" ").concat(insight.sentiment_reasoning);
+                }
+              });
             }
-          });
-        } catch (err) {
-          console.error("Error querying Polygon.io to get stock news", err);
-        }
+            newsMap.set("description", descr);
+            value.news.set(newsArticle.article_url, newsMap);
+            this.stocks.get(key).numNews += 1;
+          }
+        });
       }
     }
 
@@ -363,11 +313,6 @@ const newsBot = {
     // Populate news using Alpaca API
     console.log("Requesting news from Alpaca");
     let queryURL = "https://data.alpaca.markets/v1beta1/news";
-    let headers = {
-      "APCA-API-KEY-ID": this.ALPACA_API_KEY,
-      "APCA-API-SECRET-KEY": this.ALPACA_SECRET,
-    };
-
     let numStocks = 0; // Which "index" this loop is on
     let numBatchesSent = 0; // Number of batches of requests sent to the API
     let articleCount = 0; // Number of total articles received
@@ -393,44 +338,42 @@ const newsBot = {
           limit: this.ARTICLE_LIMIT_PER_CALL,
         };
 
-        try {
-          const response = await axios.get(queryURL, { headers, params });
-          const news = response.data;
+        const response = await alpacaGET(queryURL, params);
+        if (!response) continue;
+        const news = response.data.news;
 
-          // For each article, add the news article to related stocks if not already added
-          let findMax = 0;
-          news.news.forEach((newsArticle) => {
-            articleCount += 1;
-            findMax += 1;
-            newsArticle.symbols.forEach((ticker) => {
-              if (
-                this.stocks.has(ticker) &&
-                !this.stocks.get(ticker).news.has(newsArticle.url)
-              ) {
-                let newNews = new Map();
-                newNews.set("date", newsArticle.created_at);
-                newNews.set("title", newsArticle.headline);
+        // For each article, add the news article to related stocks if not already added
+        let findMax = 0;
+        news.forEach((newsArticle) => {
+          articleCount += 1;
+          findMax += 1;
+          newsArticle.symbols.forEach((ticker) => {
+            if (
+              this.stocks.has(ticker) &&
+              !this.stocks.get(ticker).news.has(newsArticle.url)
+            ) {
+              let newNews = new Map();
+              newNews.set("date", newsArticle.created_at);
+              newNews.set("title", newsArticle.headline);
 
-                // Could experiment with adding newsArticle.content to description but content
-                // seems to be html code
-                newNews.set("description", newsArticle.summary);
+              // Could experiment with adding newsArticle.content to description but content
+              // seems to be html code
+              newNews.set("description", newsArticle.summary);
 
-                // Populate the infomation of the stock
-                let mostRecent = this.stocks.get(ticker).newestNewsDate;
-                let currDate = new Date(newsArticle.created_at);
-                if (mostRecent === "" || mostRecent >= currDate) {
-                  this.stocks.get(ticker).newestNewsDate = currDate;
-                }
-                this.stocks.get(ticker).news.set(newsArticle.url, newNews);
-                this.stocks.get(ticker).numNews += 1;
+              // Populate the infomation of the stock
+              let mostRecent = this.stocks.get(ticker).newestNewsDate;
+              let currDate = new Date(newsArticle.created_at);
+              if (mostRecent === "" || mostRecent >= currDate) {
+                this.stocks.get(ticker).newestNewsDate = currDate;
               }
-            });
+              this.stocks.get(ticker).news.set(newsArticle.url, newNews);
+              this.stocks.get(ticker).numNews += 1;
+            }
           });
-          if (findMax > maxArticles) {
-            maxArticles = findMax;
-          }
-        } catch (err) {
-          console.error("Error querying Alpaca to get stock news", err);
+        });
+
+        if (findMax > maxArticles) {
+          maxArticles = findMax;
         }
 
         // Empty the parameter to fill with next batch of stock symbols
@@ -475,8 +418,13 @@ const newsBot = {
       }
     }
 
-    let analyzed = await this.getSentimentAnalysis([newsToAnalyze]);
-    let scores = analyzed[0];
+    // Perform sentiment analysis with ML.py
+    let response = await httpPOST(`https://localhost:${this.ML_PORT}/analyze`, [
+      newsToAnalyze,
+    ]);
+    if (!response) return;
+    let scores = response.data["results"][0];
+    console.log("new post scores:", scores);
 
     // Log a sanity check
     console.log("Ensure the numbers below are the same:");
@@ -648,10 +596,14 @@ const newsBot = {
     }
 
     // TODO: need to find way to kill/prevent this process if ML.py is not up
-    let scores = await this.getSentimentAnalysis([
-      rssNewsForProcess,
-      websocketNewsForProcess,
-    ]);
+    // Perform sentiment analysis with ML.py
+    let scoreData = await httpPOST(
+      `https://localhost:${this.ML_PORT}/analyze`,
+      [rssNewsForProcess, websocketNewsForProcess]
+    );
+    if (!scoreData) return;
+    let scores = scoreData.data["results"];
+    console.log(scores);
 
     if (scores.length == 0) {
       console.log("Analysis API is down");
@@ -690,7 +642,13 @@ const newsBot = {
       console.error("Error with processing news", err);
     }
 
-    let orgs = await this.findTickerSymbols(processMoreRSS);
+    // Find organizations within text with ML.py
+    let orgData = await httpPOST(
+      `https://localhost:${this.ML_PORT}/findTickers`,
+      processMoreRSS
+    );
+    if (!orgData) return;
+    let orgs = orgData.data["symbols"];
     for (const org of orgs) {
       this.todayPotentialStockSet.add(org);
     }

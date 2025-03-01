@@ -8,6 +8,10 @@ from yahooquery import search
 
 load_dotenv()
 
+#=========================================================================
+# Purpose: provide machine learning functionalities through libraries
+#=========================================================================
+
 # ------------------------------------------------------------------------
 # Constants and other globals
 # ------------------------------------------------------------------------
@@ -44,8 +48,7 @@ app = Flask(__name__)
 # ------------------------------------------------------------------------
 @app.route("/analyze", methods=["POST"])
 def analyze():
-    params = request.json
-    text_list = params.get("texts")
+    text_list = request.json
     
     # Keep track of how many items are in each list to restore them
     data_to_process = [] # Combined list of all texts to process
