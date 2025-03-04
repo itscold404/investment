@@ -128,6 +128,56 @@ function timeBefore(hours) {
 }
 
 //------------------------------------------------------------------------
+// Condense an array of tickers into a string of ticker symbols separated
+// by commas
+// \param array<string> tickers: ticker symbols to combine
+// \return a string of tickers symbols, separated by commas
+//------------------------------------------------------------------------
+function getTickerSymbolsString(tickers) {
+  let tickersString = "";
+  for (const t of tickers) {
+    tickersString = tickersString + t + ",";
+  }
+  tickersString = tickersString.slice(0, -1); // remove last comma
+
+  return tickersString;
+}
+
+//------------------------------------------------------------------------
+// Make a HTTPS request to Alpaca to fetch info
+// \param string queryURL: the URL to query
+// \param Object queryParams: an object that contains the query parameters to
+// be passed into the HTTPS request to Alpaca
+// \param function processingFunction: the function used to process the
+// results returned by Alpaca. This function is reponsible for formatting
+// the output
+// \param Object processingParams: the parameter to be passed into
+// processingFunction
+// \return Object that contains the infomation featched from Alpaca that
+// has been formatted
+//------------------------------------------------------------------------
+async function AlpacaHttpsCall(
+  queryURL,
+  queryParams,
+  processingFunction,
+  processingParams
+) {
+  const response = await alpacaGET(queryURL, queryParams);
+  if (!response) return null;
+
+  // Extra info to pass into each response
+  let res = {};
+  if (response.data.next_page_token) {
+    res["hasNextToken"] = true;
+  } else {
+    res["hasNextToken"] = false;
+  }
+
+  let result = processingFunction(response, res, processingParams);
+  return result;
+}
+
+//------------------------------------------------------------------------
 // Get the historical data of a stock
 // \param string symbols: ticker symbols separated by commas to get info
 // for array stockPriceData: array of stock price data to return as an array
@@ -162,55 +212,64 @@ async function getHistoricalData(symbols, params) {
   const { dataType, barSize, lookBackHours } = params;
   const startTime = timeBefore(lookBackHours).toISOString();
 
-  // combine the tickers
-  let tickersString = "";
-  for (const t of symbols) {
-    tickersString = tickersString + t + ",";
-  }
-  tickersString = tickersString.slice(0, -1); // remove last comma
+  // Combine the tickers into one string for querying
+  let tickersString = getTickerSymbolsString(symbols);
 
-  try {
-    let queryURL = "https://data.alpaca.markets/v2/stocks/bars";
-    let params = {
-      symbols: tickersString,
-      timeframe: barSize,
-      start: startTime,
-      sort: "asc",
-      limit: 10000,
-    };
-    const response = await alpacaGET(queryURL, params);
-    if (!response) return null;
-    const data = response.data.bars;
+  let queryURL = "https://data.alpaca.markets/v2/stocks/bars";
+  let queryParams = {
+    symbols: tickersString,
+    timeframe: barSize,
+    start: startTime,
+    sort: "asc",
+    limit: 10000,
+  };
+  let processingParams = { symbols: symbols, dataType: dataType };
+  let data = await AlpacaHttpsCall(
+    queryURL,
+    queryParams,
+    processHistoricalData,
+    processingParams
+  );
 
-    let res = {};
-    if (response.data.next_page_token) {
-      res["hasNextToken"] = true;
-    } else {
-      res["hasNextToken"] = false;
-    }
+  return data;
+}
 
-    for (const ticker of symbols) {
-      if (data[ticker] && data[ticker].length > 0) {
-        res[ticker] = {};
-
-        for (const type of dataType) {
-          res[ticker][type] = [];
-        }
-
-        for (const bar of data[ticker]) {
-          for (const type of dataType) {
-            res[ticker][type].push(bar[type]);
-          }
-        }
-      } else {
-        res[ticker] = null;
-      }
-    }
-    return res;
-  } catch (error) {
-    console.error("Error fetching historical data-", error.message);
+//------------------------------------------------------------------------
+// The funtion for processing and formatting the result of a historical
+// data fetch from Alpaca
+// \param Object alpacaResponse: the entire response form Alpaca query
+// \param Object res: the object this function adds to. This object
+// contains general infomation for alpaca requests
+// \param Object processingParams: the parameter to be passed into
+// processingFunction
+// \return Object with properly formatted data. See getHistoricalData()
+//------------------------------------------------------------------------
+function processHistoricalData(alpacaResponse, res, processingParams) {
+  if (!("dataType" in processingParams) || !("symbols" in processingParams)) {
     return null;
   }
+
+  const data = alpacaResponse.data.bars;
+  const { symbols, dataType } = processingParams;
+  for (const ticker of symbols) {
+    if (data[ticker] && data[ticker].length > 0) {
+      res[ticker] = {};
+
+      for (const type of dataType) {
+        res[ticker][type] = [];
+      }
+
+      for (const bar of data[ticker]) {
+        for (const type of dataType) {
+          res[ticker][type].push(bar[type]);
+        }
+      }
+    } else {
+      res[ticker] = null;
+    }
+  }
+
+  return res;
 }
 
 //------------------------------------------------------------------------
@@ -225,41 +284,39 @@ async function getHistoricalData(symbols, params) {
 //                }
 //         }
 //------------------------------------------------------------------------
-async function getLatestClosingPrice(symbols, param) {
-  // combine the tickers
-  let tickersString = "";
-  for (const t of symbols) {
-    tickersString = tickersString + t + ",";
-  }
-  tickersString = tickersString.slice(0, -1); // remove last comma
+async function getLatestClosingPrice(symbols) {
+  let tickersString = getTickerSymbolsString(symbols);
+  let queryURL = "https://data.alpaca.markets/v2/stocks/bars/latest";
+  let queryParams = {
+    symbols: tickersString,
+  };
 
-  try {
-    let queryURL = "https://data.alpaca.markets/v2/stocks/bars/latest";
-    let params = {
-      symbols: tickersString,
-    };
-    const response = await alpacaGET(queryURL, params);
-    if (!response) return null;
-    let data = response.data.bars;
+  let data = await AlpacaHttpsCall(
+    queryURL,
+    queryParams,
+    processClosingPriceData
+  );
 
-    let res = {};
-    if (response.data.next_page_token) {
-      res["hasNextToken"] = true;
-    } else {
-      res["hasNextToken"] = false;
+  return data;
+}
+
+//------------------------------------------------------------------------
+// The funtion for processing and formatting the result of a closing price
+// data fetch from Alpaca
+// \param Object alpacaResponse: the entire response form Alpaca query
+// \param Object res: the object this function adds to. This object
+// contains general infomation for alpaca requests
+// \return Object with properly formatted data. See getLatestClosingPrice()
+//------------------------------------------------------------------------
+function processClosingPriceData(alpacaResponse, res) {
+  let data = alpacaResponse.data.bars;
+  for (const t of Object.keys(data)) {
+    if ("c" in data[t]) {
+      res[t] = data[t].c;
     }
-
-    for (const t of Object.keys(data)) {
-      if ("c" in data[t]) {
-        res[t] = data[t].c;
-      }
-    }
-
-    return res;
-  } catch (err) {
-    console.error("Error getting latest closing price:", err);
-    return null;
   }
+
+  return res;
 }
 
 //------------------------------------------------------------------------
@@ -277,42 +334,38 @@ async function getLatestClosingPrice(symbols, param) {
 //                }
 //         }
 //------------------------------------------------------------------------
-async function getLatestQuote(symbols, params) {
-  // combine the tickers
-  let tickersString = "";
-  for (const t of symbols) {
-    tickersString = tickersString + t + ",";
-  }
-  tickersString = tickersString.slice(0, -1); // remove last comma
+async function getLatestQuote(symbols) {
+  let tickersString = getTickerSymbolsString(symbols);
+  let queryURL = "https://data.alpaca.markets/v2/stocks/quotes/latest";
+  let queryParams = {
+    symbols: tickersString,
+  };
 
-  try {
-    let queryURL = "https://data.alpaca.markets/v2/stocks/quotes/latest";
-    let params = {
-      symbols: tickersString,
-    };
-    const response = await alpacaGET(queryURL, params);
-    if (!response) return null;
-    let data = response.data.quotes;
+  let data = await AlpacaHttpsCall(
+    queryURL,
+    queryParams,
+    processLatestQuoteData
+  );
 
-    let res = {};
-    if (response.data.next_page_token) {
-      res["hasNextToken"] = true;
-    } else {
-      res["hasNextToken"] = false;
-    }
-
-    for (const t of Object.keys(data)) {
-      res[t] = data[t];
-    }
-
-    return res;
-  } catch (err) {
-    console.error("Error getting latest quote:", err);
-    return null;
-  }
+  return data;
 }
 
-// marketBuy("TSLA", 100);
+//------------------------------------------------------------------------
+// The funtion for processing and formatting the result of a latest quote
+// data fetch from Alpaca
+// \param Object alpacaResponse: the entire response form Alpaca query
+// \param Object res: the object this function adds to. This object
+// contains general infomation for alpaca requests
+// \return Object with properly formatted data. See getLatestQuote()
+//------------------------------------------------------------------------
+function processLatestQuoteData(alpacaResponse, res) {
+  let data = alpacaResponse.data.quotes;
+  for (const t of Object.keys(data)) {
+    res[t] = data[t];
+  }
+
+  return res;
+}
 
 export {
   alpaca,
