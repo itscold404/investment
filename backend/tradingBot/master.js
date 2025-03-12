@@ -1,8 +1,10 @@
 import dotevn from "dotenv";
 import express from "express";
 import fs from "fs";
-import { Worker } from "worker_threads";
 import https from "https";
+import { Worker } from "worker_threads";
+
+import { getAccountInfo } from "../util/alpaca.js";
 import { keyLocation, certLocation } from "../util/certs.js";
 dotevn.config({ path: "../../.env" });
 
@@ -15,7 +17,10 @@ dotevn.config({ path: "../../.env" });
 //------------------------------------------------------------------------------
 const MASTER_PORT = process.env.MASTER_PORT; // Port number for this service
 const MAX_WORKERS = 4; // Maximum number of workers running at all times
-let potentialTickers = []; // Tickers to check to see if it should be bough
+const RATIO_ALLOCATE = 0.001; // Ratio of available cash to spend on stock
+const MAX_ATR_MULTIPLIER = 3; // Maximum multiplier to ATR for calculating stop limit
+let budgetPerTicker = 30; // Budget per ticker
+let potentialTickers = ["TSLA"]; // Tickers to check to see if it should be bough
 let openPositions = {}; // Current open positions: { symbol : volume}
 let workers = {}; // Map ticker to worker object
 
@@ -51,7 +56,11 @@ app.put("/updateTickers", (req, res) => {
 //------------------------------------------------------------------------------
 async function createWorker(tickerSymbol) {
   const wkr = new Worker("./worker.js", {
-    workerData: { ticker: tickerSymbol },
+    workerData: {
+      ticker: tickerSymbol,
+      budget: budgetPerTicker,
+      maxAtrMultiplier: MAX_ATR_MULTIPLIER,
+    },
   });
 
   workers[tickerSymbol] = wkr;
@@ -64,8 +73,9 @@ async function createWorker(tickerSymbol) {
     console.log(data);
   });
 
-  wkr.on("error", () => {
+  wkr.on("error", (message) => {
     console.error(`Worker for ${tickerSymbol} crashed!`);
+    console.error(message);
     workers[tickerSymbol] = null;
   });
 
@@ -78,8 +88,6 @@ async function createWorker(tickerSymbol) {
 //------------------------------------------------------------------------------
 // Check if there are any open positions not assigned to a worker. If
 // there is, create a worker to handle that position
-// \param string tickerSymbol: The ticker symbol to be managed by the
-// worker
 //------------------------------------------------------------------------------
 async function checkAllAssigned() {
   for (ticker in workers) {
@@ -88,24 +96,53 @@ async function checkAllAssigned() {
 }
 
 //------------------------------------------------------------------------------
+// Check if there is enough workers. Create more workers if not
+//------------------------------------------------------------------------------
+async function checkNumWorkers() {
+  if (workers.length() < MAX_WORKERS) {
+    let tempTickers = potentialTickers; // Copy in case update in the middle of logic
+    let count = 0;
+    while (tempTickers.length < MAX_WORKERS) {
+      createWorker(ticker);
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
 // Filter for suitable stocks and buy them
 // \param array<string> tickerList: array of tickers to filter though and
 // potentiall buy
 //------------------------------------------------------------------------------
-async function buySuitableStock(tickerList) {
+async function filterSuitableTickers(tickerList) {
   // If open positions < MAX_WORKERS, then filter and try to buy new stocks
+}
+
+//------------------------------------------------------------------------------
+// Determin budget to spend on each ticker
+// \param float ratio: ratio to spend on per stock
+//------------------------------------------------------------------------------
+async function budgetForTickers(ratio) {
+  let account = await getAccountInfo();
+  let cash = account.cash;
+
+  return cash * ratio;
 }
 
 //------------------------------------------------------------------------------
 // Main Logic
 //------------------------------------------------------------------------------
-setInterval(async () => {
-  checkAllAssigned();
-}, CHECK_DEAD_WORKERS_SEC * 1000);
+budgetPerTicker = await budgetForTickers(RATIO_ALLOCATE);
+
+console.log(budgetPerTicker);
+
+// setInterval(async () => {
+//   checkAllAssigned();
+// }, CHECK_DEAD_WORKERS_SEC * 1000);
 
 setInterval(async () => {
   // if openPositions.length < MAX_WORKERS
-  buySuitableStock();
+  filterSuitableTickers(potentialTickers);
 }, CHECK_STOCKS_SEC * 1000);
 
-createWorker("hehe");
+// createWorker("TSLA");
+// todo: master must check if stock has an open position before assignment

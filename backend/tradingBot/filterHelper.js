@@ -113,7 +113,7 @@ const emaFilter = new FilterParams(alpaca.getHistoricalData, filterWithEma, 40);
 emaFilter.dataGetterParam = {
   dataType: ["c"],
   barSize: "5Min",
-  lookBackHours: 30, // TODO: CHANGE TO 2 WHEN DONE TESTING
+  lookBackHours: 2, // TODO: CHANGE TO 2 WHEN DONE TESTING
 };
 
 //------------------------------------------------------------------------
@@ -123,7 +123,7 @@ const adxFilter = new FilterParams(alpaca.getHistoricalData, filterWithAdx, 40);
 adxFilter.dataGetterParam = {
   dataType: ["h", "l", "c"],
   barSize: "15Min",
-  lookBackHours: 30, // TODO: CHANGE TO 4 WHEN DONE TESTING
+  lookBackHours: 4, // TODO: CHANGE TO 4 WHEN DONE TESTING
 };
 
 //------------------------------------------------------------------------
@@ -137,7 +137,7 @@ const macdFilter = new FilterParams(
 macdFilter.dataGetterParam = {
   dataType: ["c"],
   barSize: "5Min",
-  lookBackHours: 30, // TODO: CHANGE TO 3 WHEN DONE TESTING
+  lookBackHours: 3, // TODO: CHANGE TO 3 WHEN DONE TESTING
 };
 
 //------------------------------------------------------------------------
@@ -206,7 +206,7 @@ function filterBySpread(data) {
 
   if (data.ap == 0 || data.bp == 0) return false;
 
-  let spreadPercent = (data.ap - data.bp) / data.ap;
+  const spreadPercent = (data.ap - data.bp) / data.ap;
   if (spreadPercent < MAX_ACCEPTABLE_SPREAD) return true;
 
   return false;
@@ -224,7 +224,7 @@ async function filterWithEma(data) {
   }
 
   const closingPrices = data.c;
-  let ema = await indicators.getEMA(closingPrices, [EMA_PERIOD]); // should I map this also?
+  const ema = await indicators.getEMA(closingPrices, [EMA_PERIOD]); // should I map this also?
 
   // todo: maybe check if ema is above closing for at least 2 5Min bars?
   if (
@@ -251,7 +251,7 @@ async function filterWithAdx(data) {
   }
 
   const { h: highPrices, l: lowPrices, c: closePrices } = data;
-  let adx = await indicators.getADX(
+  const adx = await indicators.getADX(
     [highPrices, lowPrices, closePrices],
     [ADX_PERIOD]
   );
@@ -271,15 +271,15 @@ async function filterWithMacd(data) {
     console.error("filterWithMacd is missing parameters");
     return false;
   }
-  let closingPrices = data.c;
-  let macd = await indicators.getMACD(closingPrices, MACD_PERIOD);
+  const closingPrices = data.c;
+  const macd = await indicators.getMACD(closingPrices, MACD_PERIOD);
 
   if (!macd) return false;
   if (macd.macdLine.length < 3 || macd.histogram.length < 3) return false; // can I check either one or both lengths?
 
   // Find the slope
-  let relevantMacdLine = macd.macdLine.slice(-MACD_RELEVANT_NUM_BARS);
-  let macdAsCoord = [];
+  const relevantMacdLine = macd.macdLine.slice(-MACD_RELEVANT_NUM_BARS);
+  const macdAsCoord = [];
   for (let i = 0; i < relevantMacdLine.length; ++i) {
     macdAsCoord.push([i, relevantMacdLine[i]]);
   }

@@ -77,8 +77,8 @@ backend.get("/test/printAccount", async (req, res) => {
 // Stock suggestion page functions
 //------------------------------------------------------------------------
 backend.post("/stockSuggestions", async (req, res) => {
-  let lower = req.body.lowerBound;
-  let upper = req.body.upperBound;
-  let stocks = await nb.getStockSuggestions(lower, upper);
+  const lower = req.body.lowerBound;
+  const upper = req.body.upperBound;
+  const stocks = await nb.getStockSuggestions(lower, upper);
   res.json({ stocks: stocks });
 });

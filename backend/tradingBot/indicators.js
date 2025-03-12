@@ -24,7 +24,7 @@ async function getATR(hlc, period) {
     }
   };
 
-  let result = await atr_val(hlc, [period]);
+  const result = await atr_val(hlc, period);
   return result;
 }
 
@@ -58,7 +58,7 @@ async function getMACD(c, periods) {
     }
   };
 
-  let result = await macd_val([c], periods);
+  const result = await macd_val([c], periods);
   return result;
 }
 
@@ -80,7 +80,7 @@ async function getEMA(c, period) {
       return null;
     }
   };
-  let result = await ema_val([c], period);
+  const result = await ema_val([c], period);
   return result;
 }
 
@@ -102,7 +102,7 @@ async function getADX(hlc, period) {
       return null;
     }
   };
-  let result = await adx_val(hlc, period);
+  const result = await adx_val(hlc, period);
   return result;
 }
 
