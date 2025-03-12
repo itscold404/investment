@@ -77,6 +77,18 @@ async function getAssets() {
 }
 
 //------------------------------------------------------------------------
+// Cancel an order
+// \param string orderId: the Alpaca order ID of the order to cancel
+//------------------------------------------------------------------------
+async function cancelAlpacaOrder(orderId) {
+  try {
+    await alpaca.cancelOrder(orderId);
+  } catch (err) {
+    console.error("Error canceling order:", err.message);
+  }
+}
+
+//------------------------------------------------------------------------
 // Buy a stock during market open
 // \param string type: the type of buy - "market", "limit", etc.
 // \param string tickerSymbol: ticker symbol to buy
@@ -113,7 +125,7 @@ async function buyTicker(type, tickerSymbol, qty, limitPrice) {
 // order: close price of the latest bar (closePrice), limit price for the
 // buy (bLimitPrice), stop price and limit price for the take profit and
 // stop loss: tpStopPrice, tpLimitPrice, slStopPrice, slLimitPrice
-// \return true or false depending on if the order executed
+// \return the order ID if the order executed or null otherwise
 // Note: If only the stop price is specified for the stop loss, the stop
 // loss becomes a market sell
 //------------------------------------------------------------------------
@@ -121,18 +133,11 @@ async function limitBracketOrder(tickerSymbol, qty, priceParams) {
   let take_profit = {};
   let stop_loss = {};
 
-  if (priceParams.tpStopPrice) {
-    take_profit.stop_price = Math.round(priceParams.tpStopPrice * 100) / 100;
-  } else {
-    console.error("Missing Stop Price for take profit");
-    return false;
-  }
-
   if (priceParams.slStopPrice) {
     stop_loss.stop_price = Math.round(priceParams.slStopPrice * 100) / 100;
   } else {
     console.error("Missing StopPrice for stop loss");
-    return false;
+    return null;
   }
 
   if (priceParams.tpLimitPrice) {
@@ -142,35 +147,40 @@ async function limitBracketOrder(tickerSymbol, qty, priceParams) {
       Math.round((priceParams.bLimitPrice + 0.01) * 100) / 100;
   } else {
     console.error("Missing limit price for take profit");
-    return false;
+    return null;
+  }
+
+  if (priceParams.tpStopPrice) {
+    take_profit.stop_price = Math.round(priceParams.tpStopPrice * 100) / 100;
   }
 
   if (priceParams.slLimitPrice) {
     stop_loss.limit_price = priceParams.slLimitPrice;
   }
 
-  let order = {
+  const param = {
     side: "buy",
     symbol: tickerSymbol,
     type: "limit",
     qty: qty,
     limit_price: priceParams.bLimitPrice,
     time_in_force: "day",
-    extended_hours: true,
+    extended_hours: false,
     order_class: "bracket",
     take_profit: take_profit,
     stop_loss: stop_loss,
   };
 
   try {
-    await alpaca.createOrder(order).then(() => {
-      console.log("Buying", qty, tickerSymbol);
-    });
-    return true;
+    const order = await alpaca.createOrder(param);
+    console.log("Buying", qty, tickerSymbol);
+    console.log("order:", param);
+    console.log(order.id);
+    return order.id;
   } catch (err) {
     console.error("Bracket order error:", err);
     console.error("order:", order);
-    return false;
+    return null;
   }
 }
 
@@ -180,19 +190,23 @@ async function limitBracketOrder(tickerSymbol, qty, priceParams) {
 // \param int qty: number of stocks of symbol specified to buy
 // TODO: handle order errors
 //------------------------------------------------------------------------
-function marketSell(tickerSymbol, qty) {
-  alpaca
-    .createOrder({
-      symbol: tickerSymbol,
-      qty: qty,
-      side: "sell",
-      type: "market",
-      time_in_force: "day",
-      extended_hours: false,
-    })
-    .then(() => {
-      console.log("order Created");
-    });
+async function marketSell(tickerSymbol, qty) {
+  try {
+    await alpaca
+      .createOrder({
+        symbol: tickerSymbol,
+        qty: qty,
+        side: "sell",
+        type: "market",
+        time_in_force: "day",
+        extended_hours: false,
+      })
+      .then(() => {
+        console.log("order Created");
+      });
+  } catch (err) {
+    console.error("Error from market sell:", err);
+  }
 }
 
 //------------------------------------------------------------------------
@@ -448,6 +462,7 @@ function processLatestQuoteData(alpacaResponse, res) {
 
 export {
   alpaca,
+  cancelAlpacaOrder,
   limitBracketOrder,
   getAccountInfo,
   getAssets,

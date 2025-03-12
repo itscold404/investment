@@ -2,7 +2,7 @@ import { workerData, parentPort } from "worker_threads";
 
 import { getLatestClosingPrice, limitBracketOrder } from "../util/alpaca.js";
 import { getADX, getATR, getEMA, getMACD } from "./indicators.js";
-import { getHistoricalData } from "../util/alpaca.js";
+import { cancelAlpacaOrder, getHistoricalData } from "../util/alpaca.js";
 
 //========================================================================
 // Purpose: Manage when to sell stocks
@@ -12,10 +12,13 @@ import { getHistoricalData } from "../util/alpaca.js";
 // Constants and Globals
 //------------------------------------------------------------------------------
 const CHECK_MOMENTUM_SEC = 5; // How often to check the momentum of this ticker
-const MAX_ATR_MULTIPLIER = workerData.maxAtrMultiplier;
-const BUDGET = workerData.budget;
+const BUDGET = workerData.budget; // Budget per ticker
+const CANCEL_ORDER_PERIOD = workerData.cancelPeriod; // Miliseconds before terminating order
 let ticker = workerData.ticker; // Ticker symbol this worker is managing
 let tickerQty = 0; // Number of positions bought. For partial fill mitigation
+
+// Maximum multiplier to ATR for calculating stop limit
+const MAX_ATR_MULTIPLIER = workerData.maxAtrMultiplier;
 
 //------------------------------------------------------------------------------
 // Inform parent what stock has been sold
@@ -81,14 +84,17 @@ async function buyTicker(ticker) {
 
   const priceParams = {
     bLimitPrice: closePrice,
-    tpStopPrice: closePrice + scaledATR, // round to hundreath
+    tpLimitPrice: closePrice + scaledATR, // round to hundreath
     slStopPrice: closePrice - scaledATR,
   };
 
   // How to handle failed orders or partial fills? Do this in alpaca.js
-  let sent = await limitBracketOrder(ticker, quantity, priceParams);
-  if (!sent) {
-    console.error("Failed to create order for", ticker);
+  const orderId = await limitBracketOrder(ticker, quantity, priceParams);
+  if (orderId) {
+    tickerQty = quantity;
+    setTimeout(async () => {
+      await cancelAlpacaOrder(orderId);
+    }, CANCEL_ORDER_PERIOD);
   }
 }
 

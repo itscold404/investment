@@ -13,13 +13,18 @@ dotevn.config({ path: "../../.env" });
 //==============================================================================
 
 //------------------------------------------------------------------------------
-// Constants and Globals
+// Constants and Globals for Workers
+//------------------------------------------------------------------------------
+const RATIO_ALLOCATE = 0.001; // Ratio of available cash to spend on stock
+const MAX_ATR_MULTIPLIER = 3; // Maximum multiplier to ATR for calculating stop limit
+const CANCEL_ORDER_PERIOD = 3000; // Miliseconds before terminating order
+let budgetPerTicker = 30; // Budget per ticker
+
+//------------------------------------------------------------------------------
+// Constants and Globals for Master
 //------------------------------------------------------------------------------
 const MASTER_PORT = process.env.MASTER_PORT; // Port number for this service
 const MAX_WORKERS = 4; // Maximum number of workers running at all times
-const RATIO_ALLOCATE = 0.001; // Ratio of available cash to spend on stock
-const MAX_ATR_MULTIPLIER = 3; // Maximum multiplier to ATR for calculating stop limit
-let budgetPerTicker = 30; // Budget per ticker
 let potentialTickers = ["TSLA"]; // Tickers to check to see if it should be bough
 let openPositions = {}; // Current open positions: { symbol : volume}
 let workers = {}; // Map ticker to worker object
@@ -60,6 +65,7 @@ async function createWorker(tickerSymbol) {
       ticker: tickerSymbol,
       budget: budgetPerTicker,
       maxAtrMultiplier: MAX_ATR_MULTIPLIER,
+      cancelPeriod: CANCEL_ORDER_PERIOD,
     },
   });
 
@@ -144,5 +150,5 @@ setInterval(async () => {
   filterSuitableTickers(potentialTickers);
 }, CHECK_STOCKS_SEC * 1000);
 
-// createWorker("TSLA");
+createWorker("TSLA");
 // todo: master must check if stock has an open position before assignment
