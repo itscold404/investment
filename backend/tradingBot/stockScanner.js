@@ -149,7 +149,7 @@ async function findSuitableTickers(tickers) {
   const filteredByRecentVolume = await filterBy(
     tickers,
     volumeFilter,
-    "Volume"
+    "Recent Volume"
   );
   const filteredBySpread = await filterBy(
     filteredByRecentVolume,

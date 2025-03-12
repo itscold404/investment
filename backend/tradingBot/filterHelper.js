@@ -36,7 +36,7 @@ const EMA_PERIOD = 20; // Period of EMA
 //------------------------------------------------------------------------
 // ADX filter constants
 //------------------------------------------------------------------------
-const ADX_PERIOD = 14; // Period of ADX
+const ADX_PERIOD = 7; // Period of ADX
 
 //------------------------------------------------------------------------
 // MACD filter constants
@@ -89,12 +89,12 @@ dailyVolumeFilter.dataGetterParam = {
 const volumeFilter = new FilterParams(
   alpaca.getHistoricalData,
   filterByVolume,
-  100 // could be 200?
+  200
 );
 volumeFilter.dataGetterParam = {
   dataType: ["v"],
   barSize: "15Min",
-  lookBackHours: 30, // TODO: CHANGE TO .5 WHEN DONE TESTING
+  lookBackHours: 0.5, // TODO: CHANGE TO .5 WHEN DONE TESTING
 };
 
 //------------------------------------------------------------------------
@@ -103,13 +103,13 @@ volumeFilter.dataGetterParam = {
 const spreadFilter = new FilterParams(
   alpaca.getLatestQuote,
   filterBySpread,
-  40 // could be 200?
+  150
 );
 
 //------------------------------------------------------------------------
 // Parameters for filtering with EMA
 //------------------------------------------------------------------------
-const emaFilter = new FilterParams(alpaca.getHistoricalData, filterWithEma, 40);
+const emaFilter = new FilterParams(alpaca.getHistoricalData, filterWithEma, 80);
 emaFilter.dataGetterParam = {
   dataType: ["c"],
   barSize: "5Min",
@@ -284,8 +284,18 @@ async function filterWithMacd(data) {
     macdAsCoord.push([i, relevantMacdLine[i]]);
   }
 
-  if (linearRegression.m > 0 && macd.histogram[macd.histogram.length - 1]) {
-    return true;
+  const regression = linearRegression(macdAsCoord);
+  if (macd.histogram.length >= 2) {
+    const growingHistogram =
+      macd.histogram[macd.histogram.length - 1] >=
+      macd.histogram[macd.histogram.length - 2];
+    if (
+      regression.m > 0 &&
+      growingHistogram &&
+      macd.histogram[macd.histogram.length - 1] > 0
+    ) {
+      return true;
+    }
   }
 
   return false;

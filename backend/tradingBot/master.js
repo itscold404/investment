@@ -150,5 +150,5 @@ setInterval(async () => {
   filterSuitableTickers(potentialTickers);
 }, CHECK_STOCKS_SEC * 1000);
 
-createWorker("TSLA");
+// createWorker("TSLA");
 // todo: master must check if stock has an open position before assignment
