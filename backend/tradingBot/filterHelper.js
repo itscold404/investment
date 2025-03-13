@@ -2,51 +2,51 @@ import * as alpaca from "../util/alpaca.js";
 import * as indicators from "./indicators.js";
 import { linearRegression } from "simple-statistics";
 
-//========================================================================
+//==============================================================================
 // Purpose: settings for stock indicaticators and helper for filtering
 // stocks
-//========================================================================
+//==============================================================================
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Price filter constants
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const LOWEST_PRICE = 10; // Lowest price of a stock we will buy
 const HIGHEST_PRICE = 50; // Highest price of a stock we will buy
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Daily Volume and Recent Volume filter constants
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Minumum average daily volume of stock we will buy
 const MINIMUM_DAILY_VOLUME = 2000000;
 
 // Minimum volume per 15 minutes we trade
 const MIN_VOL_PER_15 = MINIMUM_DAILY_VOLUME / 6.5 / 4;
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Spread filter constants
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Maximum acceptable spread of a stock as a percent of it's price
 const MAX_ACCEPTABLE_SPREAD = 0.02;
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // EMA filter constants
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const EMA_PERIOD = 20; // Period of EMA
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // ADX filter constants
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const ADX_PERIOD = 7; // Period of ADX
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // MACD filter constants
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const MACD_PERIOD = [12, 26, 9]; // Period for MACD indicator
 const MACD_RELEVANT_NUM_BARS = 3; // Number of latest bars to account
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Class to hold parameters for the filtering functions
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 class FilterParams {
   dataGetter; // function to fetch data to filter
   dataGetterParam; // parameters for dataGetter function
@@ -60,18 +60,18 @@ class FilterParams {
   }
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Parameters for filtering by price
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const priceFilter = new FilterParams(
   alpaca.getLatestClosingPrice,
   filterByPrice,
   12000
 );
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Parameters for filtering by daily volume
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const dailyVolumeFilter = new FilterParams(
   alpaca.getHistoricalData,
   filterByDailyVolume,
@@ -83,9 +83,9 @@ dailyVolumeFilter.dataGetterParam = {
   lookBackHours: 168,
 };
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Parameters for filtering by recent volume
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const volumeFilter = new FilterParams(
   alpaca.getHistoricalData,
   filterByVolume,
@@ -97,18 +97,18 @@ volumeFilter.dataGetterParam = {
   lookBackHours: 0.5, // TODO: CHANGE TO .5 WHEN DONE TESTING
 };
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Parameters for filtering by spread
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const spreadFilter = new FilterParams(
   alpaca.getLatestQuote,
   filterBySpread,
   150
 );
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Parameters for filtering with EMA
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const emaFilter = new FilterParams(alpaca.getHistoricalData, filterWithEma, 80);
 emaFilter.dataGetterParam = {
   dataType: ["c"],
@@ -116,9 +116,9 @@ emaFilter.dataGetterParam = {
   lookBackHours: 2, // TODO: CHANGE TO 2 WHEN DONE TESTING
 };
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Parameters for filtering with ADX
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const adxFilter = new FilterParams(alpaca.getHistoricalData, filterWithAdx, 40);
 adxFilter.dataGetterParam = {
   dataType: ["h", "l", "c"],
@@ -126,9 +126,9 @@ adxFilter.dataGetterParam = {
   lookBackHours: 4, // TODO: CHANGE TO 4 WHEN DONE TESTING
 };
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Parameters for filtering with MACD
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const macdFilter = new FilterParams(
   alpaca.getHistoricalData,
   filterWithMacd,
@@ -140,22 +140,22 @@ macdFilter.dataGetterParam = {
   lookBackHours: 3, // TODO: CHANGE TO 3 WHEN DONE TESTING
 };
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Check if this stock should be traded based on its price
 // \param Object data: Object containing price data
 // \return true if this stock should be traded based on this filter
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 function filterByPrice(data) {
   if (data >= LOWEST_PRICE && data <= HIGHEST_PRICE) return true;
 
   return false;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Check if this stock should be traded based on its daily volume
 // \param Object data: Object containing daily volume data
 // \return true if this stock should be traded based on this filter
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 function filterByDailyVolume(data) {
   if (!("v" in data)) {
     console.error("filterByDailyVolume is missing parameters");
@@ -175,11 +175,11 @@ function filterByDailyVolume(data) {
   return false;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Check if this stock should be traded based on its volume
 // \param Object data: Object containing volume data
 // \return true if this stock should be traded based on this filter
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 function filterByVolume(data) {
   if (!("v" in data)) {
     console.error("filterByVolume is missing parameters");
@@ -193,11 +193,11 @@ function filterByVolume(data) {
   return false;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Check if this stock should be traded based on its spread
 // \param Object data: Object containing data of the last quote
 // \return true if this stock should be traded based on this filter
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 function filterBySpread(data) {
   if (!("ap" in data) || !("bp" in data)) {
     console.error("filterBySpread is missing parameters");
@@ -212,11 +212,11 @@ function filterBySpread(data) {
   return false;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Check if this stock should be traded based on EMA
 // \param Object data: Object containing close data as EMA's input
 // \return true if this stock should be traded based on this filter
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function filterWithEma(data) {
   if (!("c" in data)) {
     console.error("filterWithEma missing parameters");
@@ -238,12 +238,12 @@ async function filterWithEma(data) {
   return false;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Check if this stock should be traded based on ADX
 // \param Object data: Object containing high, low, and close data as
 // ADX's input
 // \return true if this stock should be traded based on this filter
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function filterWithAdx(data) {
   if (!("h" in data) || !("l" in data) || !("c" in data)) {
     console.error("filterWithAdx is missing parameters");
@@ -261,11 +261,11 @@ async function filterWithAdx(data) {
   return false;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Check if this stock should be traded based on MACD
 // \param Object data: Object containing closing data as MACD's input
 // \return true if this stock should be traded based on this filter
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function filterWithMacd(data) {
   if (!("c" in data)) {
     console.error("filterWithMacd is missing parameters");

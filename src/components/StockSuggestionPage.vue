@@ -23,7 +23,9 @@
           placeholder="30"
           type="number"
         />
-        <button id="find-stocks-button" type="button" @click="findStocks">Find Stocks!</button>
+        <button id="find-stocks-button" type="button" @click="findStocks">
+          Find Stocks!
+        </button>
       </div>
 
       <!-- Loading screen -->
@@ -37,20 +39,37 @@
         <button id="sort-newest" type="button" @click="sortStocks('newest')">
           Sort: Newest News
         </button>
-        <button id="sort-num-news" type="button" @click="sortStocks('mostNews')">
+        <button
+          id="sort-num-news"
+          type="button"
+          @click="sortStocks('mostNews')"
+        >
           Sort: # of News
         </button>
-        <button id="sort-percent-change" type="button" @click="sortStocks('percentChange')">
+        <button
+          id="sort-percent-change"
+          type="button"
+          @click="sortStocks('percentChange')"
+        >
           Sort: % Change
         </button>
-        <button id="sort-percent-change" type="button" @click="sortStocks('sentScore')">
+        <button
+          id="sort-percent-change"
+          type="button"
+          @click="sortStocks('sentScore')"
+        >
           Sort: Sentiment Score
         </button>
 
-        <div v-for="(stock, index) in sortedStocks" :key="stock.symbol" class="stock-item">
+        <div
+          v-for="(stock, index) in sortedStocks"
+          :key="stock.symbol"
+          class="stock-item"
+        >
           <div class="stock-summary" @click="toggleStock(index)">
             {{ stock.symbol }} -- Price:${{ stock.lastPrice }}, 1D Change:
-            {{ stock.dayPercentChange }}%, Average Sentiment: {{ stock.sentScore }}
+            {{ stock.dayPercentChange }}%, Average Sentiment:
+            {{ stock.sentScore }}
           </div>
 
           <div class="stock-details" v-if="expandedIndex === index">
@@ -68,7 +87,10 @@
               <p>----------</p>
             </div>
             <h3>Negative News</h3>
-            <div v-for="negn in stock.negNewsList" :key="negn[0] + stock.symbol">
+            <div
+              v-for="negn in stock.negNewsList"
+              :key="negn[0] + stock.symbol"
+            >
               <p>{{ negn[1] }}</p>
               <a :href="negn[0]" target="_blank">LINK</a>
               <p>----------</p>
@@ -111,9 +133,9 @@ export default {
       this.$router.push({ name: "HelpSelectionPage" });
     },
 
-    //------------------------------------------------------------------------
+    //------------------------------------------------------------------------------
     // Request stock news from the server
-    //------------------------------------------------------------------------
+    //------------------------------------------------------------------------------
     async findStocks() {
       this.loading = true;
       this.receivedData = false;
@@ -139,9 +161,9 @@ export default {
       }
     },
 
-    //------------------------------------------------------------------------
+    //------------------------------------------------------------------------------
     // Expand the stock information when click on the item
-    //------------------------------------------------------------------------
+    //------------------------------------------------------------------------------
     toggleStock(index) {
       if (index === this.expandedIndex) {
         this.expandedIndex = null;
@@ -150,17 +172,17 @@ export default {
       }
     },
 
-    //------------------------------------------------------------------------
+    //------------------------------------------------------------------------------
     // Expand the stock information when click on the item
-    //------------------------------------------------------------------------
+    //------------------------------------------------------------------------------
     sortStocks(attribute) {
       this.sortStocksBy = attribute;
     },
   },
   computed: {
-    //------------------------------------------------------------------------
+    //------------------------------------------------------------------------------
     // Sort stocks based on selected attribute
-    //------------------------------------------------------------------------
+    //------------------------------------------------------------------------------
     sortedStocks() {
       const stocksCopy = [...this.stocks];
 

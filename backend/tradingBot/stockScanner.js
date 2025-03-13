@@ -11,22 +11,22 @@ import {
   volumeFilter,
 } from "./filterHelper.js";
 
-//========================================================================
+//==============================================================================
 // Purpose: Script to constantly run and scan for suitable stocks to buy.
 // This is the main way for the master script to know what stocks to buy
-//========================================================================
+//==============================================================================
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Constants and Globals
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const MASTER_PORT = process.env.MASTER_PORT;
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Create batches from a larger array
 // \param array<any> arr: array to break into even chunks (execpt last chunk)
 // \param int size: size of each chunk
 // \return array of arrays of size size
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 function chunkArray(arr, size) {
   if (size <= 0) return arr;
 
@@ -44,11 +44,11 @@ function chunkArray(arr, size) {
   return chunkedArray;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Initialize the list of potential tickers by filtering out stocks from
 // many stocks traded in the market
 // \return array<string> of stocks symbols
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function getPotentialTickers() {
   const rawTickers = await alpaca.getAssets();
 
@@ -80,14 +80,14 @@ async function getPotentialTickers() {
   return filteredVolume;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Filter by condition/attribute
 // \param array<string> tickers: array of ticker symbols to filter
 // \param FilterParams params: FilterParams object to use for filtering
 // \param string filterName: The name of the condition/attribute that
 // will be printed
 // \return an array of tickers (as a string) that passed the filter
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function filterBy(tickers, params, filterName) {
   const filteredTickers = [];
   let requestCount = 0;
@@ -139,12 +139,12 @@ async function filterBy(tickers, params, filterName) {
   return filteredTickers;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Filter the tickers based on condtions/indicators to find suitable
 // tickers to buy
 // \param array<string> tickers: the tickers to filter
 // \return an array of tickers (as a string) to buy
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function findSuitableTickers(tickers) {
   const filteredByRecentVolume = await filterBy(
     tickers,
@@ -164,10 +164,10 @@ async function findSuitableTickers(tickers) {
   return filteredByMACD;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Main stock scanner logic:
 // Filter stocks and send stocks to the master
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const accountInfo = await alpaca.getAccountInfo(); // Account information
 const TICKERS = await getPotentialTickers(); // Potential tickers of stocks to trade
 const REFRESH_SECONDS = 10; // How often to scan for stocks to buy

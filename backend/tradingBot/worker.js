@@ -4,9 +4,9 @@ import { getLatestClosingPrice, limitBracketOrder } from "../util/alpaca.js";
 import { getADX, getATR, getEMA, getMACD } from "./indicators.js";
 import { cancelAlpacaOrder, getHistoricalData } from "../util/alpaca.js";
 
-//========================================================================
+//==============================================================================
 // Purpose: Manage when to sell stocks
-//========================================================================
+//==============================================================================
 
 //------------------------------------------------------------------------------
 // Constants and Globals

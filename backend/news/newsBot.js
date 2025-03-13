@@ -12,14 +12,14 @@ import { certLocation } from "../util/certs.js";
 
 dotevn.config({ path: "../../.env" });
 
-//==========================================================================
+//==============================================================================
 // Purpose: helper class for getting and processing news
-//==========================================================================
+//==============================================================================
 
 const newsBot = {
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Constants and global variables
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   POLYGON_BASE_URL: process.env.POLYGON_BASE_URL, // Polygon.io base url
   POLYGON_API_KEY: process.env.POLYGON_API_KEY, // Polygon.io API key
   ALPACA_API_KEY: process.env.ALPACA_PAPER_API_KEY, // Polygon.io base url
@@ -99,10 +99,10 @@ const newsBot = {
 
   containsSpecial: [], // for testing purposes
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Initialize the bot
   // int rssRefresh: How often to fetch from RSS feeds
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   init_bot(rssRefresh) {
     this.RSS_REFRESH = rssRefresh;
 
@@ -123,12 +123,12 @@ const newsBot = {
     return newsBot;
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Add news from RSS feeds and Alpaca websocket (live news) with mutex to
   // the BEGINNING of liveNews array.
   // string newsTitle: Title of the article
   // string url: URL of the article
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async addLiveNews(newsTitle, url) {
     let newsToAdd = { title: newsTitle, url: url };
     const relaseFunc = await this.liveNewsMutex.acquire();
@@ -148,11 +148,11 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Add news from RSS feeds and Alpaca websocket (live news) with mutex to
   // the rawNews array.
   // string newsTitle: Title of the article
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async addRSSNews(newsTitle) {
     const relaseFunc = await this.queuedRSSNewsMutex.acquire();
     try {
@@ -166,12 +166,12 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Add news from RSS feeds and Alpaca websocket (live news) with mutex to
   // the rawNews array.
   // map newsMap: object of news article formatted like this :
   //              {title: "title", symbols: ["SYM", "BOLS", ...]}
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async addWebsocketNews(newsMap) {
     const relaseFunc = await this.queuedWebsocketNewsMutex.acquire();
 
@@ -186,11 +186,11 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Check if the UTC date is within the Time specified
   // String utcDate: the UTC Date as a string (ex. 2024-05-10T20:15:00Z)
   // return true if the UTC date is within. false otherwise
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   withinRelevantDate(utcDate) {
     const now = new Date();
     const targetDate = new Date(utcDate);
@@ -200,12 +200,12 @@ const newsBot = {
     return diffInDays <= this.RELEVANT_DATE;
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Check if the RSS feed news should be added depending on its publishing
   // date and time
   // Date pubDate: the UTC Date
   // return true if it should be added. false otherwise
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   shouldAddRssFeed(pubDate) {
     // If pubDate is older than currtime - RSS_REFRESH, then we know that
     // this news from the rss feed has already been seen/processed
@@ -216,12 +216,12 @@ const newsBot = {
     return timeDiff <= refresh;
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Ask OpenAI for impact score of current news
   // array of arrays of texts: array of array(s) of strings to search for
   //                           organizations
   // return the list of scores for each news
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async askOpenAI(texts) {
     try {
       const completion = await this.openai.chat.completions.create({
@@ -236,13 +236,13 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Populate the list of stocks with percent change of
   // [lowerBound, upperBound]
   //
   // int lowerBound: Lower bound of stock price change for 1 day
   // int upperBound: Higher bound of stock price change for 1 day
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async fillStocksList(lowerBound, upperBound) {
     let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=${this.POLYGON_API_KEY}`;
     // let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=PAYC&apiKey=${this.POLYGON_API_KEY}`;
@@ -263,10 +263,10 @@ const newsBot = {
     });
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Populate the list of stocks with news using Alpaca (which gets news
   // from Benzinga) and Polygon.io
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async fillStockNews() {
     // Populate news using Polygon.io API
     // TODO: could put this in a promise to get news without blocking and update
@@ -395,10 +395,10 @@ const newsBot = {
     console.log("       Max articles per page:", maxArticles);
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Perform sentiment Analysis all news on the stocks. Sends all news
   // in one batch.
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async getSentimentAnalysisAllNews() {
     // Create two arrays, one of identifiers and one of value's to run in
     // sentiment analysis. Send as one batch to take advantage of
@@ -463,11 +463,11 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Get recommendations for what stocks to buy based on the news
   // int lower: lower bounds as a percent
   // int upper: upperbound as a percent
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async getStockSuggestions(lower, upper) {
     await this.fillStocksList(lower, upper);
     await this.fillStockNews();
@@ -475,9 +475,9 @@ const newsBot = {
     return Array.from(this.stocks.values());
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Fetch news from RSS. Populate the array of live news
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async fetchRSS() {
     try {
       const feedPromises = this.rssFeedURLs.map((url) =>
@@ -512,9 +512,9 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Start listening to Alpaca's websocket
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async listenAlpacaWebsocket() {
     const ws = new WebSocket(this.ALPACA_WEBSOCKET_NEWS_URL);
 
@@ -574,10 +574,10 @@ const newsBot = {
     });
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Process the raw news before clearing it. Add potential stock tickers
   // to todayPotentialStockSet.
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async processRawNews() {
     // Create a copy of news to prevent holding onto the lock
     const relaseFuncRSS = await this.queuedRSSNewsMutex.acquire();

@@ -1,17 +1,17 @@
 import tulind from "tulind";
 import { promisify } from "util";
 
-//========================================================================
+//==============================================================================
 // Purpose: puts indicators generated from tulind in a common format
-//========================================================================
+//==============================================================================
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Calcualte the Average True Range (ATR)
 // \param array hlc: array of array of[ hight, low, close ] data
 // \param array period: period to calculate ATR
 // \return an array with ATR data or null if there
 // is an error
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function getATR(hlc, period) {
   const atr_async = promisify(tulind.indicators.atr.indicator);
   const atr_val = async (data, period) => {
@@ -28,7 +28,7 @@ async function getATR(hlc, period) {
   return result;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Calcualte the Moving Average Convergence/Divergence (MACD)
 // \param array c: array of close data
 // \param array periods: array of integers of length 3 representing:
@@ -40,7 +40,7 @@ async function getATR(hlc, period) {
 //          histogram: [array representing histogram]
 //        }
 // or if there is an error, return null
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function getMACD(c, periods) {
   const macd_async = promisify(tulind.indicators.macd.indicator);
   const macd_val = async (close, periods) => {
@@ -62,13 +62,13 @@ async function getMACD(c, periods) {
   return result;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Calcualte the Exponential Moving Average (EMA)
 // \param array c: array of close data
 // \param array period: number of data points for calculation
 // \return an array with EMA data or if there is an error,
 // return null
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function getEMA(c, period) {
   const ema_async = promisify(tulind.indicators.ema.indicator);
   const ema_val = async (close, period) => {
@@ -84,13 +84,13 @@ async function getEMA(c, period) {
   return result;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Calcualte the Average Directional Movement Index (ADX)
 // \param array hlc: array of array of[ hight, low, close ] data
 // \param array period: number of data points for calculation in an array
 // \return an array with ADX data or if there is an error,
 // return null
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function getADX(hlc, period) {
   const adx_async = promisify(tulind.indicators.adx.indicator);
   const adx_val = async (close, period) => {
@@ -108,7 +108,7 @@ async function getADX(hlc, period) {
 
 export { getADX, getATR, getEMA, getMACD };
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // How to check Tulind indicator usage
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // console.log(tulind.indicators["adx"]);

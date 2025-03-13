@@ -4,32 +4,32 @@ import { alpacaGET } from "./httpUtil.js";
 
 dotevn.config({ path: "../../.env" });
 
-//========================================================================
+//==============================================================================
 // Purpose: standardize data fetched from Alpaca
 // Order documentation:
 // https://docs.alpaca.markets/docs/orders-at-alpaca
-//========================================================================
+//==============================================================================
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Constants and Globals
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const IS_PAPER_TRADING = true;
 const PAPER_API = process.env.ALPACA_PAPER_API_KEY;
 const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Setup and connections
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 const alpaca = new Alpaca({
   keyId: PAPER_API,
   secretKey: PAPER_SECRET,
   paper: IS_PAPER_TRADING,
 });
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Fetch alpaca account infomation
 // \return alpaca account infomation
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function getAccountInfo() {
   const account = await alpaca
     .getAccount()
@@ -44,11 +44,11 @@ async function getAccountInfo() {
   return account;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Get symbol tickers of active stocks in NYSE, NASDAQ, ARCA, BATS
 // exchanges
 // \return an array of ticker symbols as strings
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function getAssets() {
   const assets = await alpaca
     .getAssets({
@@ -76,10 +76,10 @@ async function getAssets() {
   return null;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Cancel an order
 // \param string orderId: the Alpaca order ID of the order to cancel
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function cancelAlpacaOrder(orderId) {
   try {
     await alpaca.cancelOrder(orderId);
@@ -88,14 +88,14 @@ async function cancelAlpacaOrder(orderId) {
   }
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Buy a stock during market open
 // \param string type: the type of buy - "market", "limit", etc.
 // \param string tickerSymbol: ticker symbol to buy
 // \param int qty: number of stocks of symbol specified to buy
 // \param float limit: (optional) limit price to buy the stock
 // TODO: handle order errors
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function buyTicker(type, tickerSymbol, qty, limitPrice) {
   // TODO: figure out how to take advantage of client_order_id param
 
@@ -117,7 +117,7 @@ async function buyTicker(type, tickerSymbol, qty, limitPrice) {
   });
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Buy a stock using bracket Order
 // string tickerSymbol: ticker symbol to buy
 // \param int qty: number of stocks of symbol specified to buy
@@ -128,7 +128,7 @@ async function buyTicker(type, tickerSymbol, qty, limitPrice) {
 // \return the order ID if the order executed or null otherwise
 // Note: If only the stop price is specified for the stop loss, the stop
 // loss becomes a market sell
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function limitBracketOrder(tickerSymbol, qty, priceParams) {
   let take_profit = {};
   let stop_loss = {};
@@ -184,12 +184,12 @@ async function limitBracketOrder(tickerSymbol, qty, priceParams) {
   }
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Buy a stock during market open
 // \param string tickerSymbol: ticker symbol to buy
 // \param int qty: number of stocks of symbol specified to buy
 // TODO: handle order errors
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function marketSell(tickerSymbol, qty) {
   try {
     await alpaca
@@ -209,23 +209,23 @@ async function marketSell(tickerSymbol, qty) {
   }
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Find the date in UTC format before specified time
 // int hours: how many hours before current time
 // return the date (and time) in UTC format the hours before current time
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 function timeBefore(hours) {
   const now = new Date();
   const before = new Date(now.getTime() - hours * 60 * 60 * 1000);
   return before;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Condense an array of tickers into a string of ticker symbols separated
 // by commas
 // \param array<string> tickers: ticker symbols to combine
 // \return a string of tickers symbols, separated by commas
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 function getTickerSymbolsString(tickers) {
   let tickersString = "";
   for (const t of tickers) {
@@ -236,7 +236,7 @@ function getTickerSymbolsString(tickers) {
   return tickersString;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Make a HTTPS request to Alpaca to fetch info
 // \param string queryURL: the URL to query
 // \param Object queryParams: an object that contains the query parameters to
@@ -248,7 +248,7 @@ function getTickerSymbolsString(tickers) {
 // processingFunction
 // \return Object that contains the infomation featched from Alpaca that
 // has been formatted
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function AlpacaHttpsCall(
   queryURL,
   queryParams,
@@ -270,7 +270,7 @@ async function AlpacaHttpsCall(
   return result;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Get the historical data of a stock
 // \param array<string> symbols: ticker symbols to get info for
 // \param Object params: an object that contains the parameters below:
@@ -291,7 +291,7 @@ async function AlpacaHttpsCall(
 //              }
 //
 // in the event of an error, return null
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function getHistoricalData(symbols, params) {
   if (
     !("dataType" in params) ||
@@ -327,7 +327,7 @@ async function getHistoricalData(symbols, params) {
   return data;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // The funtion for processing and formatting the result of a historical
 // data fetch from Alpaca
 // \param Object alpacaResponse: the entire response form Alpaca query
@@ -336,7 +336,7 @@ async function getHistoricalData(symbols, params) {
 // \param Object processingParams: the parameter to be passed into
 // processingFunction
 // \return Object with properly formatted data. See getHistoricalData()
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 function processHistoricalData(alpacaResponse, res, processingParams) {
   if (!("dataType" in processingParams) || !("symbols" in processingParams)) {
     return null;
@@ -365,7 +365,7 @@ function processHistoricalData(alpacaResponse, res, processingParams) {
   return res;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Get the most recent closing price for a array of symbols
 // \param array<string> symbols: ticker symbols to search info for
 // \param Object param: param to fullfill structure of filterBy in
@@ -376,7 +376,7 @@ function processHistoricalData(alpacaResponse, res, processingParams) {
 //                  c: 100
 //                }
 //         }
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function getLatestClosingPrice(symbols) {
   const tickersString = getTickerSymbolsString(symbols);
   const queryURL = "https://data.alpaca.markets/v2/stocks/bars/latest";
@@ -393,14 +393,14 @@ async function getLatestClosingPrice(symbols) {
   return data;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // The funtion for processing and formatting the result of a closing price
 // data fetch from Alpaca
 // \param Object alpacaResponse: the entire response form Alpaca query
 // \param Object res: the object this function adds to. This object
 // contains general infomation for alpaca requests
 // \return Object with properly formatted data. See getLatestClosingPrice()
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 function processClosingPriceData(alpacaResponse, res) {
   const data = alpacaResponse.data.bars;
   for (const t of Object.keys(data)) {
@@ -412,7 +412,7 @@ function processClosingPriceData(alpacaResponse, res) {
   return res;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // Get the most recent closing price for a array of symbols
 // \param array<string> symbols: ticker symbols to search info for
 // \param Object params: this parameter is not used. Included to meet
@@ -426,7 +426,7 @@ function processClosingPriceData(alpacaResponse, res) {
 //                  bs:1
 //                }
 //         }
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 async function getLatestQuote(symbols) {
   const tickersString = getTickerSymbolsString(symbols);
   const queryURL = "https://data.alpaca.markets/v2/stocks/quotes/latest";
@@ -443,14 +443,14 @@ async function getLatestQuote(symbols) {
   return data;
 }
 
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // The funtion for processing and formatting the result of a latest quote
 // data fetch from Alpaca
 // \param Object alpacaResponse: the entire response form Alpaca query
 // \param Object res: the object this function adds to. This object
 // contains general infomation for alpaca requests
 // \return Object with properly formatted data. See getLatestQuote()
-//------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 function processLatestQuoteData(alpacaResponse, res) {
   const data = alpacaResponse.data.quotes;
   for (const t of Object.keys(data)) {
