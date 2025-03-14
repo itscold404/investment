@@ -15,15 +15,15 @@ dotevn.config({ path: "../../.env" });
 // Constants and Globals
 //------------------------------------------------------------------------------
 const IS_PAPER_TRADING = true;
-const PAPER_API = process.env.ALPACA_PAPER_API_KEY;
-const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
+const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
+const ALPACA_SECRET_KEY = process.env.ALPACA_SECRET;
 
 //------------------------------------------------------------------------------
 // Setup and connections
 //------------------------------------------------------------------------------
 const alpaca = new Alpaca({
-  keyId: PAPER_API,
-  secretKey: PAPER_SECRET,
+  keyId: ALPACA_API_KEY,
+  secretKey: ALPACA_SECRET_KEY,
   paper: IS_PAPER_TRADING,
 });
 
@@ -41,8 +41,8 @@ async function createAlpacaWebsocket(url) {
     ws.send(
       JSON.stringify({
         action: "auth",
-        key: PAPER_API,
-        secret: PAPER_SECRET,
+        key: ALPACA_API_KEY,
+        secret: ALPACA_SECRET_KEY,
       })
     );
   });

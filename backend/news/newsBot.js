@@ -22,8 +22,8 @@ const newsBot = {
   //----------------------------------------------------------------------------
   POLYGON_BASE_URL: process.env.POLYGON_BASE_URL, // Polygon.io base url
   POLYGON_API_KEY: process.env.POLYGON_API_KEY, // Polygon.io API key
-  ALPACA_API_KEY: process.env.ALPACA_PAPER_API_KEY, // Polygon.io base url
-  ALPACA_SECRET: process.env.ALPACA_SECRET_API_KEY, // Polygon.io API key
+  ALPACA_API_KEY: process.env.ALPACA_API_KEY, // Alpaca API key
+  ALPACA_SECRET: process.env.ALPACA_SECRET, // Alpaca secret key
   RELEVANT_DATE: 1, // Number of days that passed of relevant news article
   ENABLE_POLYGON_API: false, // Make or not make API calls to Polygon.io
   ML_PORT: process.env.ML_PORT, //Port for sentiment analysis API
