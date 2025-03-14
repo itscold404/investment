@@ -1,5 +1,6 @@
 import Alpaca from "@alpacahq/alpaca-trade-api";
 import dotevn from "dotenv";
+import WebSocket from "ws";
 import { alpacaGET } from "./httpUtil.js";
 
 dotevn.config({ path: "../../.env" });
@@ -27,6 +28,37 @@ const alpaca = new Alpaca({
 });
 
 //------------------------------------------------------------------------------
+// Create and return a websocket
+// \param string url: URL for the websocket to listen on
+// \return a websocket connected to Alpaca based on provided URL
+//------------------------------------------------------------------------------
+async function createAlpacaWebsocket(url) {
+  const ws = new WebSocket(url);
+
+  ws.on("open", () => {
+    console.log("Connected to Alpaca websocket");
+
+    ws.send(
+      JSON.stringify({
+        action: "auth",
+        key: PAPER_API,
+        secret: PAPER_SECRET,
+      })
+    );
+  });
+
+  ws.on("error", (err) => {
+    console.log("Websocket error:", err);
+  });
+
+  ws.on("close", () => {
+    console.log("Alpaca websocket closed");
+  });
+
+  return ws;
+}
+
+//------------------------------------------------------------------------------
 // Fetch alpaca account infomation
 // \return alpaca account infomation
 //------------------------------------------------------------------------------
@@ -42,6 +74,22 @@ async function getAccountInfo() {
     });
 
   return account;
+}
+
+//------------------------------------------------------------------------------
+// Get all positions along with the quantity
+// \return an object that holds the tickers and the number of positions
+// { APPL : 100 }
+//------------------------------------------------------------------------------
+async function getAllPositions() {
+  const myPositions = {};
+  alpaca.getPositions().then((portfolio) => {
+    portfolio.forEach(function (position) {
+      myPositions[position.symbol] = position.qty;
+    });
+  });
+
+  return myPositions;
 }
 
 //------------------------------------------------------------------------------
@@ -463,9 +511,11 @@ function processLatestQuoteData(alpacaResponse, res) {
 export {
   alpaca,
   cancelAlpacaOrder,
+  createAlpacaWebsocket,
   limitBracketOrder,
   getAccountInfo,
   getAssets,
+  getAllPositions,
   buyTicker,
   marketSell,
   getHistoricalData,
