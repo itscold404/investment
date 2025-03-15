@@ -32,8 +32,6 @@ function notifyPositionClosed() {
 // \param string ticker: the ticker symbol to buy
 //------------------------------------------------------------------------------
 async function buyTicker(ticker) {
-  console.log("in buy ticker");
-
   // Compare the short and long term ATR to check price volitility
   const shortHistoryParam = {
     dataType: ["h", "l", "c"],
@@ -52,6 +50,14 @@ async function buyTicker(ticker) {
   const historyPromises = [shortHistoryPromise, longtHistoryPromise];
   const historyData = await Promise.all(historyPromises);
 
+  if (!historyData[0] || !historyData[1]) {
+    console.error(
+      "Failed to buy as could not get historical data for ticker",
+      ticker
+    );
+    return;
+  }
+
   const shortHLC = [
     historyData[0][ticker]["h"],
     historyData[0][ticker]["l"],
@@ -69,6 +75,14 @@ async function buyTicker(ticker) {
   const pricePromise = getLatestClosingPrice([ticker]);
   const promises = [shortATRPromise, longATRPromise, pricePromise];
   const promiseData = await Promise.all(promises);
+
+  if (!promiseData[0] || !promiseData[1] || !promiseData[2]) {
+    console.error(
+      "Failed to buy as could not calculate data or get closing price for",
+      ticker
+    );
+    return;
+  }
 
   const recentShortATR = promiseData[0][promiseData[0].length - 1];
   const recentLongATR = promiseData[1][promiseData[1].length - 1];
