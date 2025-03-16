@@ -1,7 +1,6 @@
 import { workerData, parentPort } from "worker_threads";
-
 import { getLatestClosingPrice, limitBracketOrder } from "../util/alpaca.js";
-import { getADX, getATR, getEMA, getMACD } from "./indicators.js";
+import { getIndicator } from "../util/techIndicators.js";
 import { cancelAlpacaOrder, getHistoricalData } from "../util/alpaca.js";
 
 //==============================================================================
@@ -21,10 +20,20 @@ let tickerQty = 0; // Number of positions bought. For partial fill mitigation
 const MAX_ATR_MULTIPLIER = workerData.maxAtrMultiplier;
 
 //------------------------------------------------------------------------------
-// Inform parent what stock has been sold
+// Initialize indicators to avoid "Module did not self-register" error. Let
+// parent know that this worker has been loaded and can load the next worker
 //------------------------------------------------------------------------------
-function notifyPositionClosed() {
-  parentPort.postMessage(ticker);
+async function initializeWorker() {
+  try {
+    parentPort.postMessage({ status: "ready" });
+  } catch (err) {
+    parentPort.postMessage({
+      type: "error",
+      error: err.message,
+    });
+
+    process.exit(1);
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -36,7 +45,7 @@ async function buyTicker(ticker) {
   const shortHistoryParam = {
     dataType: ["h", "l", "c"],
     barSize: "5Min",
-    lookBackHours: 10,
+    lookBackHours: 50,
   };
 
   const longHistoryParam = {
@@ -47,6 +56,7 @@ async function buyTicker(ticker) {
 
   const shortHistoryPromise = getHistoricalData([ticker], shortHistoryParam);
   const longtHistoryPromise = getHistoricalData([ticker], longHistoryParam);
+
   const historyPromises = [shortHistoryPromise, longtHistoryPromise];
   const historyData = await Promise.all(historyPromises);
 
@@ -58,41 +68,44 @@ async function buyTicker(ticker) {
     return;
   }
 
-  const shortHLC = [
-    historyData[0][ticker]["h"],
-    historyData[0][ticker]["l"],
-    historyData[0][ticker]["c"],
-  ];
+  const shortHLC = {
+    high: historyData[0][ticker]["h"],
+    low: historyData[0][ticker]["l"],
+    close: historyData[0][ticker]["c"],
+    period: 14,
+  };
 
-  const longHLC = [
-    historyData[1][ticker]["h"],
-    historyData[1][ticker]["l"],
-    historyData[1][ticker]["c"],
-  ];
+  const longHLC = {
+    high: historyData[1][ticker]["h"],
+    low: historyData[1][ticker]["l"],
+    close: historyData[1][ticker]["c"],
+    period: 14,
+  };
 
-  const shortATRPromise = getATR(shortHLC, [14]);
-  const longATRPromise = getATR(longHLC, [14]);
-  const pricePromise = getLatestClosingPrice([ticker]);
-  const promises = [shortATRPromise, longATRPromise, pricePromise];
-  const promiseData = await Promise.all(promises);
+  const shortATR = getIndicator("atr", shortHLC);
+  const longATR = getIndicator("atr", longHLC);
 
-  if (!promiseData[0] || !promiseData[1] || !promiseData[2]) {
-    console.error(
-      "Failed to buy as could not calculate data or get closing price for",
-      ticker
-    );
+  if (!shortATR || !longATR) {
+    console.error("Failed to buy as could not calculate ATR data", ticker);
     return;
   }
 
-  const recentShortATR = promiseData[0][promiseData[0].length - 1];
-  const recentLongATR = promiseData[1][promiseData[1].length - 1];
+  const recentShortATR = shortATR[shortATR.length - 1];
+  const recentLongATR = longATR[longATR.length - 1];
   const atrRatio = recentShortATR / recentLongATR;
 
   // If high volatility, give more room for stock to move
   const atrCoeff = 1.5 + (MAX_ATR_MULTIPLIER - 1.5) * atrRatio;
   const scaledATR = atrCoeff * recentShortATR;
 
-  const closePrice = promiseData[2][ticker];
+  const closePriceObject = await getLatestClosingPrice([ticker]);
+
+  if (!closePriceObject) {
+    console.error("Failed to buy as could not get closing price", ticker);
+    return;
+  }
+
+  const closePrice = closePriceObject[ticker];
   let quantity = Math.floor(BUDGET / closePrice);
   quantity = quantity === 0 ? 1 : quantity; // Buy at least one of this stock
 
@@ -105,6 +118,7 @@ async function buyTicker(ticker) {
   // How to handle failed orders or partial fills? Do this in alpaca.js
   const orderId = await limitBracketOrder(ticker, quantity, priceParams);
   if (orderId) {
+    // TODO: how to guarentee that this executes before worker dies?
     tickerQty = quantity;
     setTimeout(async () => {
       await cancelAlpacaOrder(orderId);
@@ -124,6 +138,9 @@ async function checkMomentum() {
 // Main Logic
 //------------------------------------------------------------------------------
 console.log(ticker, BUDGET);
+
+await initializeWorker();
+
 parentPort.on("message", async (message) => {
   // Message from parent means new ticker assigned
   ticker = message;

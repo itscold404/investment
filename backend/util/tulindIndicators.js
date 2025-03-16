@@ -2,7 +2,11 @@ import tulind from "tulind";
 import { promisify } from "util";
 
 //==============================================================================
-// Purpose: puts indicators generated from tulind in a common format
+// Purpose: puts indicators generated from tulind in a common format. Mainly
+// used for scanning large quantity of stocks as its C foundation provides
+// efficient computation.
+//
+// Note: does not work well with JS's worker_threads
 //==============================================================================
 
 //------------------------------------------------------------------------------
@@ -107,8 +111,3 @@ async function getADX(hlc, period) {
 }
 
 export { getADX, getATR, getEMA, getMACD };
-
-//------------------------------------------------------------------------------
-// How to check Tulind indicator usage
-//------------------------------------------------------------------------------
-// console.log(tulind.indicators["adx"]);

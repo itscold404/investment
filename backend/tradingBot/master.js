@@ -7,7 +7,6 @@ import { Worker } from "worker_threads";
 import { createAlpacaWebsocket } from "../util/alpaca.js";
 import { getAccountInfo } from "../util/alpaca.js";
 import { keyLocation, certLocation } from "../util/certs.js";
-import { count } from "console";
 dotevn.config({ path: "../../.env" });
 
 //==============================================================================
@@ -27,13 +26,10 @@ let budgetPerTicker = 30; // Budget per ticker
 //------------------------------------------------------------------------------
 const MASTER_PORT = process.env.MASTER_PORT; // Port number for this service
 const MAX_WORKERS = 4; // Maximum number of workers running at all times
-let potentialTickers = ["INTC", "TSLA"]; // Tickers to check to see if it should be bought
+let potentialTickers = ["TSLA", "INTC", "ELF"]; // Tickers to check to see if it should be bought
 const ACTIVE_WORKERS = {}; // Map the ticker the worker assigned to it
 const AVAILABLE_WORKERS = []; // Workers not assigned a ticker
 const TRADE_UPDATE_URL = "wss://paper-api.alpaca.markets/v2/stream";
-
-// Interval in seconds to check for dead workers
-const CHECK_DEAD_WORKERS_SEC = 5;
 
 // Interval in seconds to check stocks to buy
 const CHECK_STOCKS_SEC = 1;
@@ -65,16 +61,20 @@ async function initializeMaster() {
   console.log("Budget per ticker:", budgetPerTicker);
 
   await startAlpacaWebsocket();
-  // setInterval(async () => {
-  //   checkAllAssigned();
-  // }, CHECK_DEAD_WORKERS_SEC * 1000);
 
   setInterval(async () => {
-    // if openPositions.length < MAX_WORKERS
     fillWorkers(potentialTickers);
   }, CHECK_STOCKS_SEC * 1000);
+}
 
-  // createWorker("TSLA");
+//------------------------------------------------------------------------------
+// Make the worker available to work on a different ticker
+// \param string tickerSymbol: the ticker that the worker working on it should
+// be freed from
+//------------------------------------------------------------------------------
+async function freeWorker(tickerSymbol) {
+  AVAILABLE_WORKERS.push(ACTIVE_WORKERS[tickerSymbol]);
+  delete ACTIVE_WORKERS[tickerSymbol];
 }
 
 //------------------------------------------------------------------------------
@@ -109,14 +109,13 @@ async function startAlpacaWebsocket() {
       // 1) ticker order is canceled
       // 2) ticker is completly sold
       if (
-        (side == "sell" && event == "fill") ||
-        (side == "buy" && event == "canceled")
+        (side === "sell" && event === "fill") ||
+        (side === "buy" && event === "canceled")
       ) {
-        if (side == "sell" && event == "fill") {
+        if (side === "sell" && event === "fill") {
           console.log(symbol, "canceled");
         }
-        AVAILABLE_WORKERS.push(ACTIVE_WORKERS[symbol]);
-        delete ACTIVE_WORKERS[symbol];
+        freeWorker(symbol);
       }
     }
   });
@@ -128,30 +127,42 @@ async function startAlpacaWebsocket() {
 // worker
 //------------------------------------------------------------------------------
 async function createWorker(tickerSymbol) {
-  const wkr = new Worker("./worker.js", {
-    workerData: {
-      ticker: tickerSymbol,
-      budget: budgetPerTicker,
-      maxAtrMultiplier: MAX_ATR_MULTIPLIER,
-      cancelPeriod: CANCEL_ORDER_PERIOD,
-    },
-  });
+  return new Promise((resolve, reject) => {
+    const wkr = new Worker("./worker.js", {
+      workerData: {
+        ticker: tickerSymbol,
+        budget: budgetPerTicker,
+        maxAtrMultiplier: MAX_ATR_MULTIPLIER,
+        cancelPeriod: CANCEL_ORDER_PERIOD,
+      },
+    });
 
-  ACTIVE_WORKERS[tickerSymbol] = wkr;
+    ACTIVE_WORKERS[tickerSymbol] = wkr;
 
-  wkr.on("message", (data) => {
-    console.log(data);
-  });
+    // Check if worker is ready
+    wkr.once("message", (msg) => {
+      console.log(msg);
+      if (msg.status === "ready") {
+        resolve(wkr);
+      } else {
+        reject(new Error("Could not create worker"));
+      }
+    });
 
-  wkr.on("error", (message) => {
-    console.error(`Worker for ${tickerSymbol} crashed!`);
-    console.error(message);
-    ACTIVE_WORKERS[tickerSymbol] = null;
-  });
+    wkr.on("message", (msg) => {
+      // TODO: accept messages from workers
+    });
 
-  wkr.on("exit", (code) => {
-    console.log(`Worker for ${tickerSymbol} exited with code ${code}`);
-    ACTIVE_WORKERS[tickerSymbol] = null;
+    wkr.on("error", (msg) => {
+      console.error(`Worker for ${tickerSymbol} crashed:`);
+      console.error(msg);
+      freeWorker(symbol);
+    });
+
+    wkr.on("exit", (code) => {
+      console.error(`Worker for ${tickerSymbol} exited with code ${code}`);
+      freeWorker(symbol);
+    });
   });
 }
 
@@ -167,13 +178,13 @@ async function fillWorkers(tickerList) {
     console.error("OOPS!! More total workers than we hired :/");
   }
 
-  // Assign tickers to availible workers first before creating new ones
+  // Assign tickers to available workers first before creating new ones
   while (AVAILABLE_WORKERS.length > 0) {
     if (tickerList.length > 0) {
       const tickerToBuy = tickerList[0];
       // Assign the ticker to the worker and mark the worker as "busy"
-      AVAILABLE_WORKERS[i].postMessage("Buy:" + tickerToBuy); // Should I check if this message has been acked?
-      ACTIVE_WORKERS[tickerToBuy] = AVAILABLE_WORKERS[i];
+      AVAILABLE_WORKERS[0].postMessage("Buy:" + tickerToBuy); // Should I check if this message has been acked?
+      ACTIVE_WORKERS[tickerToBuy] = AVAILABLE_WORKERS[0];
       tickerList.shift();
       AVAILABLE_WORKERS.shift();
       ++countActiveWkrs;
@@ -185,8 +196,8 @@ async function fillWorkers(tickerList) {
   // Create new workers if needed
   while (countActiveWkrs < MAX_WORKERS) {
     if (tickerList.length > 0) {
-      console.log(tickerList[0]);
-      createWorker(tickerList[0]);
+      await createWorker(tickerList[0]);
+      console.log("worker created", tickerList[0]);
       tickerList.shift();
       ++countActiveWkrs;
     } else {
