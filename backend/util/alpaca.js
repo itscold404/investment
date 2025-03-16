@@ -1,5 +1,6 @@
 import Alpaca from "@alpacahq/alpaca-trade-api";
 import dotevn from "dotenv";
+import WebSocket from "ws";
 import { alpacaGET } from "./httpUtil.js";
 
 dotevn.config({ path: "../../.env" });
@@ -14,17 +15,48 @@ dotevn.config({ path: "../../.env" });
 // Constants and Globals
 //------------------------------------------------------------------------------
 const IS_PAPER_TRADING = true;
-const PAPER_API = process.env.ALPACA_PAPER_API_KEY;
-const PAPER_SECRET = process.env.ALPACA_SECRET_API_KEY;
+const ALPACA_API_KEY = process.env.ALPACA_API_KEY;
+const ALPACA_SECRET_KEY = process.env.ALPACA_SECRET;
 
 //------------------------------------------------------------------------------
 // Setup and connections
 //------------------------------------------------------------------------------
 const alpaca = new Alpaca({
-  keyId: PAPER_API,
-  secretKey: PAPER_SECRET,
+  keyId: ALPACA_API_KEY,
+  secretKey: ALPACA_SECRET_KEY,
   paper: IS_PAPER_TRADING,
 });
+
+//------------------------------------------------------------------------------
+// Create and return a websocket
+// \param string url: URL for the websocket to listen on
+// \return a websocket connected to Alpaca based on provided URL
+//------------------------------------------------------------------------------
+async function createAlpacaWebsocket(url) {
+  const ws = new WebSocket(url);
+
+  ws.on("open", () => {
+    console.log("Connected to Alpaca websocket");
+
+    ws.send(
+      JSON.stringify({
+        action: "auth",
+        key: ALPACA_API_KEY,
+        secret: ALPACA_SECRET_KEY,
+      })
+    );
+  });
+
+  ws.on("error", (err) => {
+    console.log("Websocket error:", err);
+  });
+
+  ws.on("close", () => {
+    console.log("Alpaca websocket closed");
+  });
+
+  return ws;
+}
 
 //------------------------------------------------------------------------------
 // Fetch alpaca account infomation
@@ -42,6 +74,22 @@ async function getAccountInfo() {
     });
 
   return account;
+}
+
+//------------------------------------------------------------------------------
+// Get all positions along with the quantity
+// \return an object that holds the tickers and the number of positions
+// { APPL : 100 }
+//------------------------------------------------------------------------------
+async function getAllPositions() {
+  const myPositions = {};
+  alpaca.getPositions().then((portfolio) => {
+    portfolio.forEach(function (position) {
+      myPositions[position.symbol] = position.qty;
+    });
+  });
+
+  return myPositions;
 }
 
 //------------------------------------------------------------------------------
@@ -173,8 +221,8 @@ async function limitBracketOrder(tickerSymbol, qty, priceParams) {
 
   try {
     const order = await alpaca.createOrder(param);
-    console.log("Buying", qty, tickerSymbol);
-    console.log("order:", param);
+    // console.log("Buying", qty, tickerSymbol);
+    // console.log("order:", param);
     console.log(order.id);
     return order.id;
   } catch (err) {
@@ -463,9 +511,11 @@ function processLatestQuoteData(alpacaResponse, res) {
 export {
   alpaca,
   cancelAlpacaOrder,
+  createAlpacaWebsocket,
   limitBracketOrder,
   getAccountInfo,
   getAssets,
+  getAllPositions,
   buyTicker,
   marketSell,
   getHistoricalData,

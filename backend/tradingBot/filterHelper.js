@@ -1,5 +1,5 @@
 import * as alpaca from "../util/alpaca.js";
-import * as indicators from "./indicators.js";
+import * as indicators from "../util/tulindIndicators.js";
 import { linearRegression } from "simple-statistics";
 
 //==============================================================================

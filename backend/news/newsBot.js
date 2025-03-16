@@ -4,9 +4,9 @@ import Stock from "./stock.js";
 import https from "https";
 import fs from "fs";
 import Parser from "rss-parser";
-import WebSocket from "ws";
 import { Mutex } from "async-mutex";
 import OpenAI from "openai";
+import { createAlpacaWebsocket } from "../util/alpaca.js";
 import { httpGET, httpPOST, alpacaGET } from "../util/httpUtil.js";
 import { certLocation } from "../util/certs.js";
 
@@ -22,8 +22,8 @@ const newsBot = {
   //----------------------------------------------------------------------------
   POLYGON_BASE_URL: process.env.POLYGON_BASE_URL, // Polygon.io base url
   POLYGON_API_KEY: process.env.POLYGON_API_KEY, // Polygon.io API key
-  ALPACA_API_KEY: process.env.ALPACA_PAPER_API_KEY, // Polygon.io base url
-  ALPACA_SECRET: process.env.ALPACA_SECRET_API_KEY, // Polygon.io API key
+  ALPACA_API_KEY: process.env.ALPACA_API_KEY, // Alpaca API key
+  ALPACA_SECRET: process.env.ALPACA_SECRET, // Alpaca secret key
   RELEVANT_DATE: 1, // Number of days that passed of relevant news article
   ENABLE_POLYGON_API: false, // Make or not make API calls to Polygon.io
   ML_PORT: process.env.ML_PORT, //Port for sentiment analysis API
@@ -516,23 +516,10 @@ const newsBot = {
   // Start listening to Alpaca's websocket
   //----------------------------------------------------------------------------
   async listenAlpacaWebsocket() {
-    const ws = new WebSocket(this.ALPACA_WEBSOCKET_NEWS_URL);
-
-    ws.on("open", () => {
-      console.log("Connected to Alpaca websocket");
-
-      ws.send(
-        JSON.stringify({
-          action: "auth",
-          key: this.ALPACA_API_KEY,
-          secret: this.ALPACA_SECRET,
-        })
-      );
-    });
+    const ws = await createAlpacaWebsocket(this.ALPACA_WEBSOCKET_NEWS_URL);
 
     ws.on("message", async (d) => {
       const message = JSON.parse(d)[0];
-
       if (message.T === "success" && message.msg === "authenticated") {
         console.log("Authenticated in Alpaca websocket");
         ws.send(
@@ -563,14 +550,6 @@ const newsBot = {
       } else {
         console.log("Recieved unrecognized data from Alpaca", message);
       }
-    });
-
-    ws.on("error", (err) => {
-      console.log("Websocket error:", err);
-    });
-
-    ws.on("close", () => {
-      console.log("Alpaca websocket closed");
     });
   },
 

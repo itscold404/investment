@@ -14,8 +14,8 @@ dotevn.config({ path: "../../.env" });
 //------------------------------------------------------------------------------
 const HTTPS_AGENT = new https.Agent({ ca: fs.readFileSync(certLocation) });
 const ALPACA_HEADER = {
-  "APCA-API-KEY-ID": process.env.ALPACA_PAPER_API_KEY,
-  "APCA-API-SECRET-KEY": process.env.ALPACA_SECRET_API_KEY,
+  "APCA-API-KEY-ID": process.env.ALPACA_API_KEY,
+  "APCA-API-SECRET-KEY": process.env.ALPACA_SECRET,
 };
 
 //------------------------------------------------------------------------------
