@@ -13,7 +13,7 @@ import { cancelAlpacaOrder, getHistoricalData } from "../util/alpaca.js";
 const CHECK_MOMENTUM_SEC = 5; // How often to check the momentum of this ticker
 const BUDGET = workerData.budget; // Budget per ticker
 const CANCEL_ORDER_PERIOD = workerData.cancelPeriod; // Miliseconds before terminating order
-let ticker = workerData.ticker; // Ticker symbol this worker is managing
+let ticker = ""; // Ticker symbol this worker is managing
 let tickerQty = 0; // Number of positions bought. For partial fill mitigation
 
 // Maximum multiplier to ATR for calculating stop limit
@@ -142,16 +142,12 @@ console.log(ticker, BUDGET);
 await initializeWorker();
 
 parentPort.on("message", async (message) => {
-  // Message from parent means new ticker assigned
-  ticker = message;
-
-  // Buy the stock if needed
-  await buyTicker(ticker);
+  if ("buy" in message) {
+    ticker = message.buy;
+    await buyTicker(ticker);
+  }
 });
 
-// Buy stock if not already bought
-await buyTicker(ticker);
-
-setInterval(async () => {
-  checkMomentum();
-}, CHECK_MOMENTUM_SEC * 1000);
+// setInterval(async () => {
+//   checkMomentum();
+// }, CHECK_MOMENTUM_SEC * 1000);
