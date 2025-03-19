@@ -73,6 +73,11 @@ async function initializeMaster() {
 // be freed from
 //------------------------------------------------------------------------------
 function freeWorker(tickerSymbol) {
+  if (!(tickerSymbol in ACTIVE_WORKERS)) {
+    console.error("Attempting to free ticker not assigned to a worker!");
+    return;
+  }
+
   AVAILABLE_WORKERS.push(ACTIVE_WORKERS[tickerSymbol]);
   delete ACTIVE_WORKERS[tickerSymbol];
 }
@@ -83,6 +88,11 @@ function freeWorker(tickerSymbol) {
 // \param Worker worker: the worker to assign to
 //------------------------------------------------------------------------------
 function assignTickerToWorker(tickerSymbol, worker) {
+  if (!worker) {
+    console.error("Assigning ticker to undefined worker!");
+    return;
+  }
+
   worker.postMessage({ buy: tickerSymbol }); // should this be acked in workers?
   ACTIVE_WORKERS[tickerSymbol] = worker;
 }
