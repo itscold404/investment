@@ -153,7 +153,9 @@ async function createWorker() {
     });
 
     wkr.on("message", (msg) => {
-      // TODO: accept messages from workers
+      if (msg.status === "error") {
+        freeWorker(msg.ticker);
+      }
     });
 
     wkr.on("error", (msg) => {

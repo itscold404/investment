@@ -12,27 +12,29 @@ import { cancelAlpacaOrder, getHistoricalData } from "../util/alpaca.js";
 //------------------------------------------------------------------------------
 const CHECK_MOMENTUM_SEC = 5; // How often to check the momentum of this ticker
 const BUDGET = workerData.budget; // Budget per ticker
-const CANCEL_ORDER_PERIOD = workerData.cancelPeriod; // Miliseconds before terminating order
 let ticker = ""; // Ticker symbol this worker is managing
 let tickerQty = 0; // Number of positions bought. For partial fill mitigation
+
+// Miliseconds before terminating order
+const CANCEL_ORDER_PERIOD = workerData.cancelPeriod;
 
 // Maximum multiplier to ATR for calculating stop limit
 const MAX_ATR_MULTIPLIER = workerData.maxAtrMultiplier;
 
 //------------------------------------------------------------------------------
-// Initialize indicators to avoid "Module did not self-register" error. Let
-// parent know that this worker has been loaded and can load the next worker
+// Send a message to master
+// \param string stat: the status of the worker to send to master
 //------------------------------------------------------------------------------
-async function initializeWorker() {
-  try {
-    parentPort.postMessage({ status: "ready" });
-  } catch (err) {
-    parentPort.postMessage({
-      type: "error",
-      error: err.message,
-    });
-
-    process.exit(1);
+function messageMaster(stat) {
+  switch (stat) {
+    case "ready":
+      parentPort.postMessage({ status: "ready" });
+      return;
+    case "error":
+      parentPort.postMessage({ status: "error", ticker: ticker });
+    default:
+      console.error("Message to master not valid:", message);
+      return;
   }
 }
 
@@ -70,8 +72,7 @@ async function buyTicker(ticker) {
       "Failed to buy as could not get historical data for ticker",
       ticker
     );
-
-    // TODO: inform master could not buy ticker to free worker
+    messageMaster("error");
     return;
   }
 
@@ -94,6 +95,7 @@ async function buyTicker(ticker) {
 
   if (!shortATR || !longATR) {
     console.error("Failed to buy as could not calculate ATR data", ticker);
+    messageMaster("error");
     return;
   }
 
@@ -112,9 +114,7 @@ async function buyTicker(ticker) {
     !closePriceObject[ticker]
   ) {
     console.error("Failed to buy as could not get closing price", ticker);
-
-    // TODO: inform master could not buy ticker to free worker
-
+    messageMaster("error");
     return;
   }
 
@@ -137,7 +137,7 @@ async function buyTicker(ticker) {
       await cancelAlpacaOrder(orderId);
     }, CANCEL_ORDER_PERIOD);
   } else {
-    // TODO: tell master that worker has error`
+    messageMaster("error");
   }
 }
 
@@ -152,7 +152,7 @@ async function checkMomentum() {
 //------------------------------------------------------------------------------
 // Main Logic
 //------------------------------------------------------------------------------
-await initializeWorker();
+messageMaster("ready");
 
 parentPort.on("message", async (message) => {
   if ("buy" in message) {
