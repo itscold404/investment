@@ -184,6 +184,7 @@ async function limitBracketOrder(tickerSymbol, qty, priceParams) {
   if (priceParams.slStopPrice) {
     stop_loss.stop_price = Math.round(priceParams.slStopPrice * 100) / 100;
   } else {
+    console.error("Parameters passed in:", priceParams);
     console.error("Missing StopPrice for stop loss");
     return null;
   }
@@ -194,6 +195,7 @@ async function limitBracketOrder(tickerSymbol, qty, priceParams) {
     take_profit.limit_price =
       Math.round((priceParams.bLimitPrice + 0.01) * 100) / 100;
   } else {
+    console.error("Parameters passed in:", priceParams);
     console.error("Missing limit price for take profit");
     return null;
   }
@@ -221,12 +223,11 @@ async function limitBracketOrder(tickerSymbol, qty, priceParams) {
 
   try {
     const order = await alpaca.createOrder(param);
-    // console.log("Buying", qty, tickerSymbol);
-    console.log("order:", param);
+    console.log("order created:", param);
     console.log(order.id);
     return order.id;
   } catch (err) {
-    console.error("Bracket order error:", err);
+    console.error("Bracket order error:", err.response.data.message);
     console.error("order:", order);
     return null;
   }

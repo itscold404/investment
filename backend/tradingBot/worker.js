@@ -60,11 +60,18 @@ async function buyTicker(ticker) {
   const historyPromises = [shortHistoryPromise, longtHistoryPromise];
   const historyData = await Promise.all(historyPromises);
 
-  if (!historyData[0] || !historyData[1]) {
+  if (
+    !historyData[0] ||
+    !historyData[1] ||
+    !historyData[0][ticker] ||
+    !historyData[1][ticker]
+  ) {
     console.error(
       "Failed to buy as could not get historical data for ticker",
       ticker
     );
+
+    // TODO: inform master could not buy ticker to free worker
     return;
   }
 
@@ -97,11 +104,17 @@ async function buyTicker(ticker) {
   // If high volatility, give more room for stock to move
   const atrCoeff = 1.0 + (MAX_ATR_MULTIPLIER - 2) * atrRatio;
   const scaledATR = atrCoeff * recentShortATR;
-
   const closePriceObject = await getLatestClosingPrice([ticker]);
 
-  if (!closePriceObject) {
+  if (
+    !closePriceObject ||
+    !(ticker in closePriceObject) ||
+    !closePriceObject[ticker]
+  ) {
     console.error("Failed to buy as could not get closing price", ticker);
+
+    // TODO: inform master could not buy ticker to free worker
+
     return;
   }
 
@@ -123,6 +136,8 @@ async function buyTicker(ticker) {
     setTimeout(async () => {
       await cancelAlpacaOrder(orderId);
     }, CANCEL_ORDER_PERIOD);
+  } else {
+    // TODO: tell master that worker has error`
   }
 }
 
@@ -137,8 +152,6 @@ async function checkMomentum() {
 //------------------------------------------------------------------------------
 // Main Logic
 //------------------------------------------------------------------------------
-console.log(ticker, BUDGET);
-
 await initializeWorker();
 
 parentPort.on("message", async (message) => {
