@@ -1,5 +1,7 @@
 import * as alpaca from "../util/alpaca.js";
 import * as indicators from "../util/tulindIndicators.js";
+import { FilterParams } from "../util/filterParams.js";
+import { filterSettings } from "./filterConfig.js";
 import { linearRegression } from "simple-statistics";
 
 //==============================================================================
@@ -10,134 +12,113 @@ import { linearRegression } from "simple-statistics";
 //------------------------------------------------------------------------------
 // Price filter constants
 //------------------------------------------------------------------------------
-const LOWEST_PRICE = 10; // Lowest price of a stock we will buy
-const HIGHEST_PRICE = 50; // Highest price of a stock we will buy
+const LOWEST_PRICE = filterSettings.LOWEST_PRICE;
+const HIGHEST_PRICE = filterSettings.HIGHEST_PRICE;
+const priceFilter = new FilterParams( // Parameters for filtering by price
+  alpaca.getLatestClosingPrice,
+  filterByPrice,
+  filterSettings.priceBatchSize
+);
 
 //------------------------------------------------------------------------------
-// Daily Volume and Recent Volume filter constants
+// Daily Volume filter constants
 //------------------------------------------------------------------------------
 // Minumum average daily volume of stock we will buy
-const MINIMUM_DAILY_VOLUME = 2000000;
+const MINIMUM_DAILY_VOLUME = filterSettings.MINIMUM_DAILY_VOLUME;
 
-// Minimum volume per 15 minutes we trade
-const MIN_VOL_PER_15 = MINIMUM_DAILY_VOLUME / 6.5 / 4;
+// Parameters for filtering by daily volume
+const dailyVolumeFilter = new FilterParams(
+  alpaca.getHistoricalData,
+  filterByDailyVolume,
+  filterSettings.dailyVolumeBatchSize
+);
+dailyVolumeFilter.dataGetterParam = {
+  dataType: ["v"],
+  barSize: filterSettings.dailyVolumeBarSize,
+  lookBackHours: filterSettings.dailyVolumeLookBackHour,
+};
+
+//------------------------------------------------------------------------------
+// Recent Volume filter constants
+//------------------------------------------------------------------------------
+// Minimum average volume per 15 minutes we will buy
+const MIN_VOL_PER_15 = filterSettings.MIN_VOL_PER_15;
+
+// Parameters for filtering by recent volume
+const recentVolumeFilter = new FilterParams(
+  alpaca.getHistoricalData,
+  filterByVolume,
+  filterSettings.recentVolumeBatchSize
+);
+recentVolumeFilter.dataGetterParam = {
+  dataType: ["v"],
+  barSize: filterSettings.recentVolumeBarSize,
+  lookBackHours: filterSettings.recentVolumeLookBackHours,
+};
 
 //------------------------------------------------------------------------------
 // Spread filter constants
 //------------------------------------------------------------------------------
-// Maximum acceptable spread of a stock as a percent of it's price
-const MAX_ACCEPTABLE_SPREAD = 0.02;
+const MAX_ACCEPTABLE_SPREAD = filterSettings.MAX_ACCEPTABLE_SPREAD;
+
+// Parameters for filtering by spread
+const spreadFilter = new FilterParams(
+  alpaca.getLatestQuote,
+  filterBySpread,
+  filterSettings.spreadBatchSize
+);
 
 //------------------------------------------------------------------------------
 // EMA filter constants
 //------------------------------------------------------------------------------
-const EMA_PERIOD = 20; // Period of EMA
+const EMA_PERIOD = filterSettings.EMA_PERIOD;
+
+// Parameters for filtering with EMA
+const emaFilter = new FilterParams(
+  alpaca.getHistoricalData,
+  filterWithEma,
+  filterSettings.emaBatchSize
+);
+emaFilter.dataGetterParam = {
+  dataType: ["c"],
+  barSize: filterSettings.emaBarSize,
+  lookBackHours: filterSettings.emaLookBackHours,
+};
 
 //------------------------------------------------------------------------------
 // ADX filter constants
 //------------------------------------------------------------------------------
-const ADX_PERIOD = 7; // Period of ADX
+const ADX_PERIOD = filterSettings.ADX_PERIOD; // Period of ADX
+
+// Parameters for filtering with ADX
+const adxFilter = new FilterParams(
+  alpaca.getHistoricalData,
+  filterWithAdx,
+  filterSettings.adxBatchSize
+);
+adxFilter.dataGetterParam = {
+  dataType: ["h", "l", "c"],
+  barSize: filterSettings.adxBarSize,
+  lookBackHours: filterSettings.adxLookBackHours,
+};
 
 //------------------------------------------------------------------------------
 // MACD filter constants
 //------------------------------------------------------------------------------
-const MACD_PERIOD = [12, 26, 9]; // Period for MACD indicator
-const MACD_RELEVANT_NUM_BARS = 3; // Number of latest bars to account
+const MACD_PERIOD = filterSettings.MACD_PERIOD;
 
-//------------------------------------------------------------------------------
-// Class to hold parameters for the filtering functions
-//------------------------------------------------------------------------------
-class FilterParams {
-  dataGetter; // function to fetch data to filter
-  dataGetterParam; // parameters for dataGetter function
-  batchSize; // number of stocks to retreive data using dataGetter function
-  filterFunction; // funcion for filtering stock data
+const MACD_RELEVANT_NUM_BARS = filterSettings.MACD_RELEVANT_NUM_BARS;
 
-  constructor(df, ff, bs) {
-    this.dataGetter = df;
-    this.filterFunction = ff;
-    this.batchSize = bs;
-  }
-}
-
-//------------------------------------------------------------------------------
-// Parameters for filtering by price
-//------------------------------------------------------------------------------
-const priceFilter = new FilterParams(
-  alpaca.getLatestClosingPrice,
-  filterByPrice,
-  12000
-);
-
-//------------------------------------------------------------------------------
-// Parameters for filtering by daily volume
-//------------------------------------------------------------------------------
-const dailyVolumeFilter = new FilterParams(
-  alpaca.getHistoricalData,
-  filterByDailyVolume,
-  2000
-);
-dailyVolumeFilter.dataGetterParam = {
-  dataType: ["v"],
-  barSize: "1Day",
-  lookBackHours: 168,
-};
-
-//------------------------------------------------------------------------------
-// Parameters for filtering by recent volume
-//------------------------------------------------------------------------------
-const volumeFilter = new FilterParams(
-  alpaca.getHistoricalData,
-  filterByVolume,
-  200
-);
-volumeFilter.dataGetterParam = {
-  dataType: ["v"],
-  barSize: "15Min",
-  lookBackHours: 0.5, // TODO: CHANGE TO .5 WHEN DONE TESTING
-};
-
-//------------------------------------------------------------------------------
-// Parameters for filtering by spread
-//------------------------------------------------------------------------------
-const spreadFilter = new FilterParams(
-  alpaca.getLatestQuote,
-  filterBySpread,
-  150
-);
-
-//------------------------------------------------------------------------------
-// Parameters for filtering with EMA
-//------------------------------------------------------------------------------
-const emaFilter = new FilterParams(alpaca.getHistoricalData, filterWithEma, 80);
-emaFilter.dataGetterParam = {
-  dataType: ["c"],
-  barSize: "5Min",
-  lookBackHours: 2, // TODO: CHANGE TO 2 WHEN DONE TESTING
-};
-
-//------------------------------------------------------------------------------
-// Parameters for filtering with ADX
-//------------------------------------------------------------------------------
-const adxFilter = new FilterParams(alpaca.getHistoricalData, filterWithAdx, 40);
-adxFilter.dataGetterParam = {
-  dataType: ["h", "l", "c"],
-  barSize: "15Min",
-  lookBackHours: 4, // TODO: CHANGE TO 4 WHEN DONE TESTING
-};
-
-//------------------------------------------------------------------------------
 // Parameters for filtering with MACD
-//------------------------------------------------------------------------------
 const macdFilter = new FilterParams(
   alpaca.getHistoricalData,
   filterWithMacd,
-  40
+  filterSettings.macdBatchSize
 );
 macdFilter.dataGetterParam = {
   dataType: ["c"],
-  barSize: "5Min",
-  lookBackHours: 3, // TODO: CHANGE TO 3 WHEN DONE TESTING
+  barSize: filterSettings.macdBarSize,
+  lookBackHours: filterSettings.macdLookBackHours,
 };
 
 //------------------------------------------------------------------------------
@@ -224,7 +205,7 @@ async function filterWithEma(data) {
   }
 
   const closingPrices = data.c;
-  const ema = await indicators.getEMA(closingPrices, [EMA_PERIOD]); // should I map this also?
+  const ema = await indicators.getEMA(closingPrices, [EMA_PERIOD]);
 
   // todo: maybe check if ema is above closing for at least 2 5Min bars?
   if (
@@ -305,7 +286,7 @@ export {
   priceFilter,
   dailyVolumeFilter,
   macdFilter,
-  volumeFilter,
+  recentVolumeFilter,
   spreadFilter,
   emaFilter,
   adxFilter,

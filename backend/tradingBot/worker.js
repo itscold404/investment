@@ -45,7 +45,7 @@ async function buyTicker(ticker) {
   const shortHistoryParam = {
     dataType: ["h", "l", "c"],
     barSize: "5Min",
-    lookBackHours: 50,
+    lookBackHours: 1.5, // TODO: change this to 1.5 when done testing
   };
 
   const longHistoryParam = {
@@ -95,7 +95,7 @@ async function buyTicker(ticker) {
   const atrRatio = recentShortATR / recentLongATR;
 
   // If high volatility, give more room for stock to move
-  const atrCoeff = 1.5 + (MAX_ATR_MULTIPLIER - 1.5) * atrRatio;
+  const atrCoeff = 1.0 + (MAX_ATR_MULTIPLIER - 2) * atrRatio;
   const scaledATR = atrCoeff * recentShortATR;
 
   const closePriceObject = await getLatestClosingPrice([ticker]);

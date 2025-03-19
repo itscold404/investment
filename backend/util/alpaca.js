@@ -222,7 +222,7 @@ async function limitBracketOrder(tickerSymbol, qty, priceParams) {
   try {
     const order = await alpaca.createOrder(param);
     // console.log("Buying", qty, tickerSymbol);
-    // console.log("order:", param);
+    console.log("order:", param);
     console.log(order.id);
     return order.id;
   } catch (err) {

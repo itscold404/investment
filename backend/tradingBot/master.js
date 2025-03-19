@@ -16,7 +16,7 @@ dotevn.config({ path: "../../.env" });
 //------------------------------------------------------------------------------
 // Constants and Globals for Workers
 //------------------------------------------------------------------------------
-const RATIO_ALLOCATE = 0.001; // Ratio of available cash to spend on stock
+const RATIO_ALLOCATE = 0.02; // Ratio of available cash to spend on stock
 const MAX_ATR_MULTIPLIER = 3; // Maximum multiplier to ATR for calculating stop limit
 const CANCEL_ORDER_PERIOD = 3000; // Miliseconds before terminating order
 let budgetPerTicker = 30; // Budget per ticker
@@ -25,14 +25,14 @@ let budgetPerTicker = 30; // Budget per ticker
 // Constants and Globals for Master
 //------------------------------------------------------------------------------
 const MASTER_PORT = process.env.MASTER_PORT; // Port number for this service
-const MAX_WORKERS = 4; // Maximum number of workers running at all times
+const MAX_WORKERS = 6; // Maximum number of workers running at all times
 let potentialTickers = []; // Tickers to check to see if it should be bought
 const ACTIVE_WORKERS = {}; // Map the ticker the worker assigned to it
 const AVAILABLE_WORKERS = []; // Workers not assigned a ticker
 const TRADE_UPDATE_URL = "wss://paper-api.alpaca.markets/v2/stream";
 
 // Interval in seconds to check stocks to buy
-const CHECK_STOCKS_SEC = 1;
+const CHECK_STOCKS_SEC = 3;
 
 let options = {
   key: fs.readFileSync(keyLocation),

@@ -8,7 +8,7 @@ import {
   macdFilter,
   priceFilter,
   spreadFilter,
-  volumeFilter,
+  recentVolumeFilter,
 } from "./filterHelper.js";
 
 //==============================================================================
@@ -50,6 +50,7 @@ function chunkArray(arr, size) {
 // \return array<string> of stocks symbols
 //------------------------------------------------------------------------------
 async function getPotentialTickers() {
+  //TODO: remove leveraged etfs from this list
   const rawTickers = await alpaca.getAssets();
 
   if (!rawTickers) return null;
@@ -148,7 +149,7 @@ async function filterBy(tickers, params, filterName) {
 async function findSuitableTickers(tickers) {
   const filteredByRecentVolume = await filterBy(
     tickers,
-    volumeFilter,
+    recentVolumeFilter,
     "Recent Volume"
   );
   const filteredBySpread = await filterBy(
@@ -172,6 +173,8 @@ const accountInfo = await alpaca.getAccountInfo(); // Account information
 const TICKERS = await getPotentialTickers(); // Potential tickers of stocks to trade
 const REFRESH_SECONDS = 10; // How often to scan for stocks to buy
 const accountCash = accountInfo.cash; // Available cash in account
+
+// TODO: implement newsTicker
 const newsTickers = []; // Tickers mentioned in news. Should be prioritiezed
 let potentialTickers = []; // Tickers that have been filtered
 
