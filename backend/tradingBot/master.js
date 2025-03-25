@@ -229,8 +229,11 @@ async function fillWorkers(tickerList) {
 // \param float ratio: ratio to spend on per stock
 //------------------------------------------------------------------------------
 async function budgetForTickers(ratio) {
-  let account = await getAccountInfo();
-  let cash = account.cash;
+  const account = await getAccountInfo();
+
+  // Simulate 2000 total cash given that we get 100k from Alpaca
+  const cash = account.cash - 98000;
+  console.log(cash);
 
   return cash * ratio;
 }

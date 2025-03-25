@@ -43,6 +43,9 @@ function messageMaster(stat) {
 // \param string ticker: the ticker symbol to buy
 //------------------------------------------------------------------------------
 async function buyTicker(ticker) {
+  // TODO: check if I have enough cash to make the purchase? probably not a worry
+  // with cash accounts
+
   // Compare the short and long term ATR to check price volitility
   const shortHistoryParam = {
     dataType: ["h", "l", "c"],
