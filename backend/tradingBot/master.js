@@ -1,8 +1,11 @@
 import dotevn from "dotenv";
 import express from "express";
 import fs from "fs";
-import { Worker } from "worker_threads";
 import https from "https";
+import { Worker } from "worker_threads";
+
+import { createAlpacaWebsocket } from "../util/alpaca.js";
+import { getAccountInfo } from "../util/alpaca.js";
 import { keyLocation, certLocation } from "../util/certs.js";
 dotevn.config({ path: "../../.env" });
 
@@ -11,19 +14,25 @@ dotevn.config({ path: "../../.env" });
 //==============================================================================
 
 //------------------------------------------------------------------------------
-// Constants and Globals
+// Constants and Globals for Workers
+//------------------------------------------------------------------------------
+const RATIO_ALLOCATE = 0.02; // Ratio of available cash to spend on stock
+const MAX_ATR_MULTIPLIER = 3; // Maximum multiplier to ATR for calculating stop limit
+const CANCEL_ORDER_PERIOD = 3000; // Miliseconds before terminating order
+let budgetPerTicker = 30; // Budget per ticker
+
+//------------------------------------------------------------------------------
+// Constants and Globals for Master
 //------------------------------------------------------------------------------
 const MASTER_PORT = process.env.MASTER_PORT; // Port number for this service
-const MAX_WORKERS = 4; // Maximum number of workers running at all times
-let potentialTickers = []; // Tickers to check to see if it should be bough
-let openPositions = {}; // Current open positions: { symbol : volume}
-let workers = {}; // Map ticker to worker object
-
-// Interval in seconds to check for dead workers
-const CHECK_DEAD_WORKERS_SEC = 5;
+const MAX_WORKERS = 6; // Maximum number of workers running at all times
+let potentialTickers = []; // Tickers to check to see if it should be bought
+const ACTIVE_WORKERS = {}; // Map the ticker the worker assigned to it
+const AVAILABLE_WORKERS = []; // Workers not assigned a ticker
+const TRADE_UPDATE_URL = "wss://paper-api.alpaca.markets/v2/stream";
 
 // Interval in seconds to check stocks to buy
-const CHECK_STOCKS_SEC = 10;
+const CHECK_STOCKS_SEC = 3;
 
 let options = {
   key: fs.readFileSync(keyLocation),
@@ -45,67 +54,188 @@ app.put("/updateTickers", (req, res) => {
 });
 
 //------------------------------------------------------------------------------
-// Create workers
-// \param string tickerSymbol: The ticker symbol to be managed by the
-// worker
+// Initialize master
 //------------------------------------------------------------------------------
-async function createWorker(tickerSymbol) {
-  const wkr = new Worker("./worker.js", {
-    workerData: { ticker: tickerSymbol },
-  });
+async function initializeMaster() {
+  budgetPerTicker = await budgetForTickers(RATIO_ALLOCATE);
+  console.log("Budget per ticker:", budgetPerTicker);
 
-  workers[tickerSymbol] = wkr;
+  await startAlpacaWebsocket();
 
-  wkr.on("message", (data) => {
-    // TODO: handle how to handle successful selling of stock
-    // 1) remove ticker but not worker from workers object (maybe need another data
-    // structure to track)
-    // 2) worker waits to be assigned new stock
-    console.log(data);
-  });
+  setInterval(async () => {
+    fillWorkers(potentialTickers);
+  }, CHECK_STOCKS_SEC * 1000);
+}
 
-  wkr.on("error", () => {
-    console.error(`Worker for ${tickerSymbol} crashed!`);
-    workers[tickerSymbol] = null;
-  });
+//------------------------------------------------------------------------------
+// Make the worker available to work on a different ticker
+// \param string tickerSymbol: the ticker that the worker working on it should
+// be freed from
+//------------------------------------------------------------------------------
+function freeWorker(tickerSymbol) {
+  if (!(tickerSymbol in ACTIVE_WORKERS)) {
+    console.error("Attempting to free ticker not assigned to a worker!");
+    return;
+  }
 
-  wkr.on("exit", (code) => {
-    console.log(`Worker for ${tickerSymbol} exited with code ${code}`);
-    workers[tickerSymbol] = null;
+  AVAILABLE_WORKERS.push(ACTIVE_WORKERS[tickerSymbol]);
+  delete ACTIVE_WORKERS[tickerSymbol];
+}
+
+//------------------------------------------------------------------------------
+// Assign a ticker to a worker
+// \param string tickerSymbol: the ticker that the worker should buy
+// \param Worker worker: the worker to assign to
+//------------------------------------------------------------------------------
+function assignTickerToWorker(tickerSymbol, worker) {
+  if (!worker) {
+    console.error("Assigning ticker to undefined worker!");
+    return;
+  }
+
+  worker.postMessage({ buy: tickerSymbol }); // should this be acked in workers?
+  ACTIVE_WORKERS[tickerSymbol] = worker;
+}
+
+//------------------------------------------------------------------------------
+// Initialize websocket for listening to trade updates. Handle workers
+// according to the trade updates
+//------------------------------------------------------------------------------
+async function startAlpacaWebsocket() {
+  const ws = await createAlpacaWebsocket(TRADE_UPDATE_URL);
+
+  ws.on("message", async (d) => {
+    const message = JSON.parse(d);
+    // console.log(message);
+    if (
+      message.stream === "authorization" &&
+      message.data.status === "authorized"
+    ) {
+      console.log("Authenticated in Alpaca websocket");
+      ws.send(
+        JSON.stringify({
+          action: "listen",
+          data: {
+            streams: ["trade_updates"],
+          },
+        })
+      );
+    } else if (message.stream === "trade_updates") {
+      const side = message.data.order.side;
+      const event = message.data.event;
+      const symbol = message.data.order.symbol;
+
+      // Make the worker available if:
+      // 1) ticker order is canceled
+      // 2) ticker is completly sold
+      if (
+        (side === "sell" && event === "fill") ||
+        (side === "buy" && event === "canceled")
+      ) {
+        console.log(symbol, "worker freed");
+        freeWorker(symbol);
+      }
+    }
   });
 }
 
 //------------------------------------------------------------------------------
-// Check if there are any open positions not assigned to a worker. If
-// there is, create a worker to handle that position
-// \param string tickerSymbol: The ticker symbol to be managed by the
-// worker
+// Create a worker
 //------------------------------------------------------------------------------
-async function checkAllAssigned() {
-  for (ticker in workers) {
-    if (!workers[ticker]) createWorker(ticker);
+async function createWorker() {
+  return new Promise((resolve, reject) => {
+    const wkr = new Worker("./worker.js", {
+      workerData: {
+        budget: budgetPerTicker,
+        maxAtrMultiplier: MAX_ATR_MULTIPLIER,
+        cancelPeriod: CANCEL_ORDER_PERIOD,
+      },
+    });
+
+    // Check if worker is ready
+    wkr.once("message", (msg) => {
+      console.log(msg);
+      if (msg.status === "ready") {
+        resolve(wkr);
+      } else {
+        reject(new Error("Could not create worker"));
+      }
+    });
+
+    wkr.on("message", (msg) => {
+      if (msg.status === "error") {
+        freeWorker(msg.ticker);
+      }
+    });
+
+    wkr.on("error", (msg) => {
+      // How to figure out which worker crashed?
+      // TODO: free worker that crashed
+    });
+
+    wkr.on("exit", (code) => {
+      // How to figure out which worker crashed?
+      // TODO: free worker that crashed
+    });
+  });
+}
+
+//------------------------------------------------------------------------------
+// Assign tickers to workers if not all workers are put to work
+// \param array<string> tickerList: array of tickers buy from
+//------------------------------------------------------------------------------
+async function fillWorkers(tickerList) {
+  let countActiveWkrs = Object.keys(ACTIVE_WORKERS).length;
+
+  if (countActiveWkrs + AVAILABLE_WORKERS.length > MAX_WORKERS) {
+    // TODO: handle this case?
+    console.error("OOPS!! More total workers than we hired :/");
+  }
+
+  // Assign tickers to available workers first before creating new ones
+  while (AVAILABLE_WORKERS.length > 0) {
+    if (tickerList.length > 0) {
+      const tickerToBuy = tickerList[0];
+
+      // Assign the first available worker the first stock
+      // and remove it from the available workers array
+      assignTickerToWorker(tickerToBuy, AVAILABLE_WORKERS[0]);
+      AVAILABLE_WORKERS.shift();
+
+      tickerList.shift();
+      ++countActiveWkrs;
+    } else {
+      break;
+    }
+  }
+
+  // Create new workers if needed and assign them a ticker
+  while (countActiveWkrs < MAX_WORKERS) {
+    if (tickerList.length > 0) {
+      const tickerToBuy = tickerList[0];
+      const wkr = await createWorker(tickerToBuy);
+      console.log("worker created", tickerToBuy);
+      assignTickerToWorker(tickerToBuy, wkr);
+      tickerList.shift();
+      ++countActiveWkrs;
+    } else {
+      break;
+    }
   }
 }
 
 //------------------------------------------------------------------------------
-// Filter for suitable stocks and buy them
-// \param array<string> tickerList: array of tickers to filter though and
-// potentiall buy
+// Determin budget to spend on each ticker
+// \param float ratio: ratio to spend on per stock
 //------------------------------------------------------------------------------
-async function buySuitableStock(tickerList) {
-  // If open positions < MAX_WORKERS, then filter and try to buy new stocks
+async function budgetForTickers(ratio) {
+  let account = await getAccountInfo();
+  let cash = account.cash;
+
+  return cash * ratio;
 }
 
 //------------------------------------------------------------------------------
 // Main Logic
 //------------------------------------------------------------------------------
-setInterval(async () => {
-  checkAllAssigned();
-}, CHECK_DEAD_WORKERS_SEC * 1000);
-
-setInterval(async () => {
-  // if openPositions.length < MAX_WORKERS
-  buySuitableStock();
-}, CHECK_STOCKS_SEC * 1000);
-
-createWorker("hehe");
+await initializeMaster();

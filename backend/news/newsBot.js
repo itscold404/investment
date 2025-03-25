@@ -4,26 +4,26 @@ import Stock from "./stock.js";
 import https from "https";
 import fs from "fs";
 import Parser from "rss-parser";
-import WebSocket from "ws";
 import { Mutex } from "async-mutex";
 import OpenAI from "openai";
+import { createAlpacaWebsocket } from "../util/alpaca.js";
 import { httpGET, httpPOST, alpacaGET } from "../util/httpUtil.js";
 import { certLocation } from "../util/certs.js";
 
 dotevn.config({ path: "../../.env" });
 
-//==========================================================================
+//==============================================================================
 // Purpose: helper class for getting and processing news
-//==========================================================================
+//==============================================================================
 
 const newsBot = {
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Constants and global variables
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   POLYGON_BASE_URL: process.env.POLYGON_BASE_URL, // Polygon.io base url
   POLYGON_API_KEY: process.env.POLYGON_API_KEY, // Polygon.io API key
-  ALPACA_API_KEY: process.env.ALPACA_PAPER_API_KEY, // Polygon.io base url
-  ALPACA_SECRET: process.env.ALPACA_SECRET_API_KEY, // Polygon.io API key
+  ALPACA_API_KEY: process.env.ALPACA_API_KEY, // Alpaca API key
+  ALPACA_SECRET: process.env.ALPACA_SECRET, // Alpaca secret key
   RELEVANT_DATE: 1, // Number of days that passed of relevant news article
   ENABLE_POLYGON_API: false, // Make or not make API calls to Polygon.io
   ML_PORT: process.env.ML_PORT, //Port for sentiment analysis API
@@ -99,10 +99,10 @@ const newsBot = {
 
   containsSpecial: [], // for testing purposes
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Initialize the bot
   // int rssRefresh: How often to fetch from RSS feeds
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   init_bot(rssRefresh) {
     this.RSS_REFRESH = rssRefresh;
 
@@ -123,12 +123,12 @@ const newsBot = {
     return newsBot;
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Add news from RSS feeds and Alpaca websocket (live news) with mutex to
   // the BEGINNING of liveNews array.
   // string newsTitle: Title of the article
   // string url: URL of the article
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async addLiveNews(newsTitle, url) {
     let newsToAdd = { title: newsTitle, url: url };
     const relaseFunc = await this.liveNewsMutex.acquire();
@@ -148,11 +148,11 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Add news from RSS feeds and Alpaca websocket (live news) with mutex to
   // the rawNews array.
   // string newsTitle: Title of the article
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async addRSSNews(newsTitle) {
     const relaseFunc = await this.queuedRSSNewsMutex.acquire();
     try {
@@ -166,12 +166,12 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Add news from RSS feeds and Alpaca websocket (live news) with mutex to
   // the rawNews array.
   // map newsMap: object of news article formatted like this :
   //              {title: "title", symbols: ["SYM", "BOLS", ...]}
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async addWebsocketNews(newsMap) {
     const relaseFunc = await this.queuedWebsocketNewsMutex.acquire();
 
@@ -186,11 +186,11 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Check if the UTC date is within the Time specified
   // String utcDate: the UTC Date as a string (ex. 2024-05-10T20:15:00Z)
   // return true if the UTC date is within. false otherwise
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   withinRelevantDate(utcDate) {
     const now = new Date();
     const targetDate = new Date(utcDate);
@@ -200,28 +200,28 @@ const newsBot = {
     return diffInDays <= this.RELEVANT_DATE;
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Check if the RSS feed news should be added depending on its publishing
   // date and time
   // Date pubDate: the UTC Date
   // return true if it should be added. false otherwise
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   shouldAddRssFeed(pubDate) {
     // If pubDate is older than currtime - RSS_REFRESH, then we know that
     // this news from the rss feed has already been seen/processed
     const now = new Date();
     const refresh = this.RSS_REFRESH * 60 * 1000;
-    let timeDiff = now.getTime() - pubDate;
+    const timeDiff = now.getTime() - pubDate;
 
     return timeDiff <= refresh;
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Ask OpenAI for impact score of current news
   // array of arrays of texts: array of array(s) of strings to search for
   //                           organizations
   // return the list of scores for each news
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async askOpenAI(texts) {
     try {
       const completion = await this.openai.chat.completions.create({
@@ -236,13 +236,13 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Populate the list of stocks with percent change of
   // [lowerBound, upperBound]
   //
   // int lowerBound: Lower bound of stock price change for 1 day
   // int upperBound: Higher bound of stock price change for 1 day
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async fillStocksList(lowerBound, upperBound) {
     let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?apiKey=${this.POLYGON_API_KEY}`;
     // let queryURL = `${this.POLYGON_BASE_URL}/v2/snapshot/locale/us/markets/stocks/tickers?tickers=PAYC&apiKey=${this.POLYGON_API_KEY}`;
@@ -254,8 +254,8 @@ const newsBot = {
     const allStocks = response.data.tickers;
 
     allStocks.forEach((s) => {
-      let percentChange = s.todaysChangePerc;
-      let lastMarketPrice = s.min.c;
+      const percentChange = s.todaysChangePerc;
+      const lastMarketPrice = s.min.c;
       if (lowerBound < percentChange && percentChange < upperBound) {
         let stock = new Stock(s.ticker, percentChange, lastMarketPrice);
         this.stocks.set(s.ticker, stock);
@@ -263,10 +263,10 @@ const newsBot = {
     });
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Populate the list of stocks with news using Alpaca (which gets news
   // from Benzinga) and Polygon.io
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async fillStockNews() {
     // Populate news using Polygon.io API
     // TODO: could put this in a promise to get news without blocking and update
@@ -275,7 +275,7 @@ const newsBot = {
       console.log("Requesting news from Polygon.io... this may take a bit...");
       for (const [key, value] of this.stocks) {
         // use ".gte" after "utc" for articles on and after the date or ".lte" for on and before
-        let queryURL = `${this.POLYGON_BASE_URL}/v2/reference/news?ticker=${key}&order=desc&limit=${this.ARTICLE_LIMIT_PER_CALL}&sort=published_utc&apiKey=${this.POLYGON_API_KEY}`;
+        const queryURL = `${this.POLYGON_BASE_URL}/v2/reference/news?ticker=${key}&order=desc&limit=${this.ARTICLE_LIMIT_PER_CALL}&sort=published_utc&apiKey=${this.POLYGON_API_KEY}`;
         const response = await httpGET(queryURL);
         if (!response) return;
         const news = response.data.results;
@@ -307,17 +307,17 @@ const newsBot = {
 
     // Find the date within relevant range
     let date = new Date();
-    let day = date.getDate() - this.RELEVANT_DATE;
+    const day = date.getDate() - this.RELEVANT_DATE;
     date.setDate(day);
 
     // Populate news using Alpaca API
     console.log("Requesting news from Alpaca");
-    let queryURL = "https://data.alpaca.markets/v1beta1/news";
+    const queryURL = "https://data.alpaca.markets/v1beta1/news";
     let numStocks = 0; // Which "index" this loop is on
     let numBatchesSent = 0; // Number of batches of requests sent to the API
     let articleCount = 0; // Number of total articles received
     let maxArticles = 0; // Maximum number of articles received from a request from a batch
-    let stockBatch = []; // The batch of stock symbols to request news of
+    const stockBatch = []; // The batch of stock symbols to request news of
     for (const key of this.stocks.keys()) {
       numStocks += 1;
       stockBatch.push(key);
@@ -327,12 +327,12 @@ const newsBot = {
         numStocks % this.STOCK_PER_REQUEST_PATCH === 0 ||
         numStocks === this.stocks.size
       ) {
-        let symbols = stockBatch.join(",");
+        const symbols = stockBatch.join(",");
 
         console.log("Requesting news on batch:", symbols);
 
         numBatchesSent += 1;
-        let params = {
+        const params = {
           symbols: symbols,
           start: date,
           limit: this.ARTICLE_LIMIT_PER_CALL,
@@ -395,16 +395,16 @@ const newsBot = {
     console.log("       Max articles per page:", maxArticles);
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Perform sentiment Analysis all news on the stocks. Sends all news
   // in one batch.
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async getSentimentAnalysisAllNews() {
     // Create two arrays, one of identifiers and one of value's to run in
     // sentiment analysis. Send as one batch to take advantage of
     // transformers parellel processing and reduce sending request overhead
-    let id = []; // Array of [stock symbol, url]
-    let newsToAnalyze = []; // Array of [title + description]
+    const id = []; // Array of [stock symbol, url]
+    const newsToAnalyze = []; // Array of [title + description]
 
     for (const [key, stock] of this.stocks) {
       for (const url of stock.news.keys()) {
@@ -419,11 +419,12 @@ const newsBot = {
     }
 
     // Perform sentiment analysis with ML.py
-    let response = await httpPOST(`https://localhost:${this.ML_PORT}/analyze`, [
-      newsToAnalyze,
-    ]);
+    const response = await httpPOST(
+      `https://localhost:${this.ML_PORT}/analyze`,
+      [newsToAnalyze]
+    );
     if (!response) return;
-    let scores = response.data["results"][0];
+    const scores = response.data["results"][0];
     console.log("new post scores:", scores);
 
     // Log a sanity check
@@ -441,9 +442,9 @@ const newsBot = {
     // Populate our map of all stocks with the analysis results
     if (scores.length === id.length && scores.length === newsToAnalyze.length) {
       for (let i = 0; i < id.length; ++i) {
-        let analysisScore = scores[i];
-        let symbol = id[i][0];
-        let url = id[i][1];
+        const analysisScore = scores[i];
+        const symbol = id[i][0];
+        const url = id[i][1];
 
         if (analysisScore === 1) {
           this.stocks.get(symbol).posNewsList.push([url, newsToAnalyze[i]]);
@@ -462,11 +463,11 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Get recommendations for what stocks to buy based on the news
   // int lower: lower bounds as a percent
   // int upper: upperbound as a percent
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async getStockSuggestions(lower, upper) {
     await this.fillStocksList(lower, upper);
     await this.fillStockNews();
@@ -474,9 +475,9 @@ const newsBot = {
     return Array.from(this.stocks.values());
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Fetch news from RSS. Populate the array of live news
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async fetchRSS() {
     try {
       const feedPromises = this.rssFeedURLs.map((url) =>
@@ -488,12 +489,12 @@ const newsBot = {
         try {
           // Just grab the newest from the feed as feeds do not update requently
           // enough
-          let newest = feed["items"][0];
-          let pubDate = new Date(newest["pubDate"]);
+          const newest = feed["items"][0];
+          const pubDate = new Date(newest["pubDate"]);
 
           if (this.shouldAddRssFeed(pubDate)) {
-            let url = newest["link"];
-            let title = newest["title"];
+            const url = newest["link"];
+            const title = newest["title"];
             console.log(title, url);
             await Promise.all([
               this.addLiveNews(title, url),
@@ -511,27 +512,14 @@ const newsBot = {
     }
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Start listening to Alpaca's websocket
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async listenAlpacaWebsocket() {
-    const ws = new WebSocket(this.ALPACA_WEBSOCKET_NEWS_URL);
-
-    ws.on("open", () => {
-      console.log("Connected to Alpaca websocket");
-
-      ws.send(
-        JSON.stringify({
-          action: "auth",
-          key: this.ALPACA_API_KEY,
-          secret: this.ALPACA_SECRET,
-        })
-      );
-    });
+    const ws = await createAlpacaWebsocket(this.ALPACA_WEBSOCKET_NEWS_URL);
 
     ws.on("message", async (d) => {
       const message = JSON.parse(d)[0];
-
       if (message.T === "success" && message.msg === "authenticated") {
         console.log("Authenticated in Alpaca websocket");
         ws.send(
@@ -542,7 +530,7 @@ const newsBot = {
         );
       } else if (message.T === "n") {
         this.addLiveNews(message.headline, message.url);
-        let involvedTickers = [];
+        const involvedTickers = [];
         for (const symbol of message.symbols) {
           involvedTickers.push(symbol);
         }
@@ -551,7 +539,7 @@ const newsBot = {
           title: message.headline,
           symbols: involvedTickers,
         });
-        let currTime = new Date().toISOString();
+        const currTime = new Date().toISOString();
         console.log(
           "Web socket:",
           currTime,
@@ -563,20 +551,12 @@ const newsBot = {
         console.log("Recieved unrecognized data from Alpaca", message);
       }
     });
-
-    ws.on("error", (err) => {
-      console.log("Websocket error:", err);
-    });
-
-    ws.on("close", () => {
-      console.log("Alpaca websocket closed");
-    });
   },
 
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   // Process the raw news before clearing it. Add potential stock tickers
   // to todayPotentialStockSet.
-  //------------------------------------------------------------------------
+  //----------------------------------------------------------------------------
   async processRawNews() {
     // Create a copy of news to prevent holding onto the lock
     const relaseFuncRSS = await this.queuedRSSNewsMutex.acquire();
@@ -585,24 +565,24 @@ const newsBot = {
     relaseFuncRSS();
 
     const relaseFuncWebsocket = await this.queuedWebsocketNewsMutex.acquire();
-    let copyWebsocketNews = this.queuedWebsocketNews;
+    const copyWebsocketNews = this.queuedWebsocketNews;
     this.queuedWebsocketNews = [];
     relaseFuncWebsocket();
 
     // Get the sentiment analysis scores
-    let websocketNewsForProcess = [];
+    const websocketNewsForProcess = [];
     for (let i = 0; i < copyWebsocketNews.length; ++i) {
       websocketNewsForProcess.push(copyWebsocketNews[i]["title"]);
     }
 
     // TODO: need to find way to kill/prevent this process if ML.py is not up
     // Perform sentiment analysis with ML.py
-    let scoreData = await httpPOST(
+    const scoreData = await httpPOST(
       `https://localhost:${this.ML_PORT}/analyze`,
       [rssNewsForProcess, websocketNewsForProcess]
     );
     if (!scoreData) return;
-    let scores = scoreData.data["results"];
+    const scores = scoreData.data["results"];
     console.log(scores);
 
     if (scores.length == 0) {
@@ -610,9 +590,9 @@ const newsBot = {
       return;
     }
     // Filter for RSS news worth processing more. Add good websocket news symbol to set
-    let rssScores = scores[0];
-    let wsScores = scores[1];
-    let processMoreRSS = [];
+    const rssScores = scores[0];
+    const wsScores = scores[1];
+    const processMoreRSS = [];
 
     for (let i = 0; i < rssScores.length; ++i) {
       if (rssScores[i] >= 0.75) {
@@ -631,7 +611,7 @@ const newsBot = {
     // This only happens in RSS news
     try {
       for (let i = 0; i < processMoreRSS.length; ++i) {
-        let specialIndex = processMoreRSS[i].indexOf("&#");
+        const specialIndex = processMoreRSS[i].indexOf("&#");
         if (specialIndex !== -1) {
           this.containsSpecial.push(processMoreRSS[i]);
           processMoreRSS[i] = processMoreRSS[i].substring(0, specialIndex);
@@ -643,12 +623,12 @@ const newsBot = {
     }
 
     // Find organizations within text with ML.py
-    let orgData = await httpPOST(
+    const orgData = await httpPOST(
       `https://localhost:${this.ML_PORT}/findTickers`,
       processMoreRSS
     );
     if (!orgData) return;
-    let orgs = orgData.data["symbols"];
+    const orgs = orgData.data["symbols"];
     for (const org of orgs) {
       this.todayPotentialStockSet.add(org);
     }
