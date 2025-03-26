@@ -156,13 +156,11 @@ const newsBot = {
   async addRSSNews(newsTitle) {
     const relaseFunc = await this.queuedRSSNewsMutex.acquire();
     try {
-      try {
-        this.queuedRSSNews.push(newsTitle);
-      } finally {
-        relaseFunc();
-      }
+      this.queuedRSSNews.push(newsTitle);
     } catch (err) {
       console.error("Failed to aquire queuedRSSNewsMutex", err);
+    } finally {
+      relaseFunc();
     }
   },
 
@@ -176,13 +174,11 @@ const newsBot = {
     const relaseFunc = await this.queuedWebsocketNewsMutex.acquire();
 
     try {
-      try {
-        this.queuedWebsocketNews.push(newsMap);
-      } finally {
-        relaseFunc();
-      }
+      this.queuedWebsocketNews.push(newsMap);
     } catch (err) {
       console.error("Failed to aquire queuedWebsocketNewsMutex", err);
+    } finally {
+      relaseFunc();
     }
   },
 

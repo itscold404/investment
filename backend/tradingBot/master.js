@@ -2,6 +2,7 @@ import dotevn from "dotenv";
 import express from "express";
 import fs from "fs";
 import https from "https";
+import { Mutex } from "async-mutex";
 import { Worker } from "worker_threads";
 
 import { createAlpacaWebsocket } from "../util/alpaca.js";
@@ -25,7 +26,7 @@ let budgetPerTicker = 30; // Budget per ticker
 // Constants and Globals for Master
 //------------------------------------------------------------------------------
 const MASTER_PORT = process.env.MASTER_PORT; // Port number for this service
-const MAX_WORKERS = 6; // Maximum number of workers running at all times
+const MAX_WORKERS = 2; // Maximum number of workers running at all times
 let potentialTickers = []; // Tickers to check to see if it should be bought
 const ACTIVE_WORKERS = {}; // Map the ticker the worker assigned to it
 const AVAILABLE_WORKERS = []; // Workers not assigned a ticker
@@ -33,6 +34,9 @@ const TRADE_UPDATE_URL = "wss://paper-api.alpaca.markets/v2/stream";
 
 // Interval in seconds to check stocks to buy
 const CHECK_STOCKS_SEC = 3;
+
+// Mutex for moving workers between active and available state
+const WORKER_MUTEX = new Mutex();
 
 let options = {
   key: fs.readFileSync(keyLocation),
@@ -133,7 +137,14 @@ async function startAlpacaWebsocket() {
         (side === "buy" && event === "canceled")
       ) {
         console.log(symbol, "worker freed");
-        freeWorker(symbol);
+        const releaseFunc = await WORKER_MUTEX.acquire();
+        try {
+          freeWorker(symbol);
+        } catch (err) {
+          console.error("Unable to aquire mutex in websocket", err);
+        } finally {
+          releaseFunc();
+        }
       }
     }
   });
@@ -162,9 +173,16 @@ async function createWorker() {
       }
     });
 
-    wkr.on("message", (msg) => {
+    wkr.on("message", async (msg) => {
       if (msg.status === "error") {
-        freeWorker(msg.ticker);
+        const releaseFunc = await WORKER_MUTEX.acquire();
+        try {
+          freeWorker(msg.ticker);
+        } catch (err) {
+          console.error("Unable to aquire mutex from worker message", err);
+        } finally {
+          releaseFunc();
+        }
       }
     });
 
@@ -185,42 +203,49 @@ async function createWorker() {
 // \param array<string> tickerList: array of tickers buy from
 //------------------------------------------------------------------------------
 async function fillWorkers(tickerList) {
-  let countActiveWkrs = Object.keys(ACTIVE_WORKERS).length;
+  const releaseFunc = await WORKER_MUTEX.acquire();
+  try {
+    let countActiveWkrs = Object.keys(ACTIVE_WORKERS).length;
 
-  if (countActiveWkrs + AVAILABLE_WORKERS.length > MAX_WORKERS) {
-    // TODO: handle this case?
-    console.error("OOPS!! More total workers than we hired :/");
-  }
-
-  // Assign tickers to available workers first before creating new ones
-  while (AVAILABLE_WORKERS.length > 0) {
-    if (tickerList.length > 0) {
-      const tickerToBuy = tickerList[0];
-
-      // Assign the first available worker the first stock
-      // and remove it from the available workers array
-      assignTickerToWorker(tickerToBuy, AVAILABLE_WORKERS[0]);
-      AVAILABLE_WORKERS.shift();
-
-      tickerList.shift();
-      ++countActiveWkrs;
-    } else {
-      break;
+    if (countActiveWkrs + AVAILABLE_WORKERS.length > MAX_WORKERS) {
+      // TODO: handle this case?
+      console.error("OOPS!! More total workers than we hired :/");
     }
-  }
 
-  // Create new workers if needed and assign them a ticker
-  while (countActiveWkrs < MAX_WORKERS) {
-    if (tickerList.length > 0) {
-      const tickerToBuy = tickerList[0];
-      const wkr = await createWorker(tickerToBuy);
-      console.log("worker created", tickerToBuy);
-      assignTickerToWorker(tickerToBuy, wkr);
-      tickerList.shift();
-      ++countActiveWkrs;
-    } else {
-      break;
+    // Assign tickers to available workers first before creating new ones
+    while (AVAILABLE_WORKERS.length > 0) {
+      if (tickerList.length > 0) {
+        const tickerToBuy = tickerList[0];
+
+        // Assign the first available worker the first stock
+        // and remove it from the available workers array
+        assignTickerToWorker(tickerToBuy, AVAILABLE_WORKERS[0]);
+        AVAILABLE_WORKERS.shift();
+
+        tickerList.shift();
+        ++countActiveWkrs;
+      } else {
+        break;
+      }
     }
+
+    // Create new workers if needed and assign them a ticker
+    while (countActiveWkrs < MAX_WORKERS) {
+      if (tickerList.length > 0) {
+        const tickerToBuy = tickerList[0];
+        const wkr = await createWorker(tickerToBuy);
+        console.log("worker created", tickerToBuy);
+        assignTickerToWorker(tickerToBuy, wkr);
+        tickerList.shift();
+        ++countActiveWkrs;
+      } else {
+        break;
+      }
+    }
+  } catch (err) {
+    console.error("Unable to aquire mutex in websocket", err);
+  } finally {
+    releaseFunc();
   }
 }
 
