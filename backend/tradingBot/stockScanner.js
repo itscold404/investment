@@ -2,6 +2,7 @@ import * as alpaca from "../util/alpaca.js";
 import fs from "fs";
 import { httpPUT } from "../util/httpUtil.js";
 import {
+  atrFilter,
   adxFilter,
   dailyVolumeFilter,
   emaFilter,
@@ -91,6 +92,7 @@ async function getPotentialTickers() {
 //------------------------------------------------------------------------------
 async function filterBy(tickers, params, filterName) {
   const filteredTickers = [];
+  const atrValues = []; // Array for temperarly holding ticker and ATR value
   let requestCount = 0;
   let hasNextToken = false;
   const dataGetter = params.dataGetter;
@@ -116,10 +118,18 @@ async function filterBy(tickers, params, filterName) {
       )
         continue;
 
-      // TODO: could put this into a map
-      const shouldAdd = await filterFunction(data[t]);
-      if (shouldAdd) {
-        filteredTickers.push(t);
+      // filterByAtr from atrFilter will return an object containing both
+      // the boolean and an ATR value, so there needs to be different cases
+      // shouldAdd is formatted [bool, number]
+      const shouldAdd = await filterFunction(data[t]); // TODO: could put this into a map
+      if (filterName === "ATR") {
+        if (shouldAdd[0]) {
+          atrValues.push([t, shouldAdd[1]]);
+        }
+      } else {
+        if (shouldAdd) {
+          filteredTickers.push(t);
+        }
       }
     }
 
@@ -136,6 +146,13 @@ async function filterBy(tickers, params, filterName) {
     filteredTickers.length
   );
   console.log("Initialization has next token:", hasNextToken);
+
+  if (filterName === "ATR") {
+    console.log(atrValues);
+    atrValues.sort((a, b) => b[1] - a[1]); // Sort by descending ATR value
+    console.log(atrValues);
+    atrValues.forEach((pair) => filteredTickers.push(pair[0]));
+  }
 
   return filteredTickers;
 }
@@ -160,9 +177,9 @@ async function findSuitableTickers(tickers) {
   const filteredByEMA = await filterBy(filteredBySpread, emaFilter, "EMA");
   const filteredByADX = await filterBy(filteredByEMA, adxFilter, "ADX");
   const filteredByMACD = await filterBy(filteredByADX, macdFilter, "MACD");
-  // require (ATR / Price) > X% (like 2–3%) for profit. if ATR is too low don't trade it
+  const filteredByATR = await filterBy(filteredByMACD, atrFilter, "ATR");
 
-  return filteredByMACD;
+  return filteredByATR;
 }
 
 //------------------------------------------------------------------------------

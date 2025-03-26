@@ -31,7 +31,7 @@ const filterSettings = {
   MIN_VOL_PER_15: 2000000 / 6.5 / 4,
   recentVolumeBatchSize: 200, // How many ticker to put into one data request batch
   recentVolumeBarSize: "15Min", // Bar type to use for filtering
-  recentVolumeLookBackHours: 10, // TODO: CHANGE TO .5 WHEN DONE TESTING
+  recentVolumeLookBackHours: 20, // TODO: CHANGE TO .5 WHEN DONE TESTING
 
   //----------------------------------------------------------------------------
   // Spread filter settings
@@ -47,7 +47,7 @@ const filterSettings = {
   EMA_PERIOD: 20, // Period of EMA
   emaBatchSize: 80, // How many ticker to put into one data request batch
   emaBarSize: "5Min", // Bar type to use for filtering
-  emaLookBackHours: 10, // TODO: CHANGE TO 2 WHEN DONE TESTING
+  emaLookBackHours: 20, // TODO: CHANGE TO 2 WHEN DONE TESTING
 
   //----------------------------------------------------------------------------
   // ADX filter settings
@@ -55,7 +55,18 @@ const filterSettings = {
   ADX_PERIOD: 5, // Period of ADX
   adxBatchSize: 40, // How many ticker to put into one data request batch
   adxBarSize: "15Min", // Bar type to use for filtering
-  adxLookBackHours: 10, // TODO: CHANGE TO 2 WHEN DONE TESTING
+  adxLookBackHours: 20, // TODO: CHANGE TO 2 WHEN DONE TESTING
+
+  //----------------------------------------------------------------------------
+  // ATR filter settings
+  //----------------------------------------------------------------------------
+  ATR_PERIOD: 9, // Period for ATR indicator
+
+  // TODO: TEST BATCH SIZE
+  atrBatchSize: 40, // How many ticker to put into one data request batch
+  atrBarSize: "5Min", // Bar type to use for filtering
+  atrLookBackHours: 20, // TODO: CHANGE TO 1.5 WHEN DONE TESTING
+  atrThreshhold: 0.02, // The percent a ticker moves by to be considered tradable
 
   //----------------------------------------------------------------------------
   // MACD filter settings
@@ -64,7 +75,7 @@ const filterSettings = {
   MACD_RELEVANT_NUM_BARS: 3, // Number of latest bars to account
   macdBatchSize: 40, // How many ticker to put into one data request batch
   macdBarSize: "5Min", // Bar type to use for filtering
-  macdLookBackHours: 10, // TODO: CHANGE TO 3 WHEN DONE TESTING
+  macdLookBackHours: 20, // TODO: CHANGE TO 3 WHEN DONE TESTING
 };
 
 export { filterSettings };

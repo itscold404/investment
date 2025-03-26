@@ -122,12 +122,32 @@ macdFilter.dataGetterParam = {
 };
 
 //------------------------------------------------------------------------------
+// ATR filter constants
+//------------------------------------------------------------------------------
+const ATR_PERIOD = filterSettings.ATR_PERIOD;
+const ATR_THRESHHOLD = filterSettings.atrThreshhold;
+
+// Parameters for filtering with MACD
+const atrFilter = new FilterParams(
+  alpaca.getHistoricalData,
+  filterWithAtr,
+  filterSettings.atrBatchSize
+);
+atrFilter.dataGetterParam = {
+  dataType: ["h", "l", "c"],
+  barSize: filterSettings.atrBarSize,
+  lookBackHours: filterSettings.atrLookBackHours,
+};
+
+//------------------------------------------------------------------------------
 // Check if this stock should be traded based on its price
 // \param Object data: Object containing price data
 // \return true if this stock should be traded based on this filter
 //------------------------------------------------------------------------------
 function filterByPrice(data) {
-  if (data >= LOWEST_PRICE && data <= HIGHEST_PRICE) return true;
+  if (data >= LOWEST_PRICE && data <= HIGHEST_PRICE) {
+    return true;
+  }
 
   return false;
 }
@@ -185,7 +205,7 @@ function filterBySpread(data) {
     return false;
   }
 
-  if (data.ap == 0 || data.bp == 0) return false;
+  if (data.ap === 0 || data.bp === 0) return false;
 
   const spreadPercent = (data.ap - data.bp) / data.ap;
   if (spreadPercent < MAX_ACCEPTABLE_SPREAD) return true;
@@ -243,6 +263,30 @@ async function filterWithAdx(data) {
 }
 
 //------------------------------------------------------------------------------
+// Check if this stock should be traded based on ATR
+// \param Object data: Object containing high, low, close data as ATR's input
+// \return true if this stock should be traded based on this filter
+//------------------------------------------------------------------------------
+async function filterWithAtr(data) {
+  if (!("h" in data) || !("l" in data) || !("c" in data)) {
+    console.error("filterWithAtr is missing parameters");
+    return false;
+  }
+
+  const { h: highPrices, l: lowPrices, c: closePrices } = data;
+  const atr = await indicators.getADX(
+    [highPrices, lowPrices, closePrices],
+    [ATR_PERIOD]
+  );
+
+  if (atr / closePrices > ATR_THRESHHOLD) {
+    return [true, atr];
+  }
+
+  return [false, -1];
+}
+
+//------------------------------------------------------------------------------
 // Check if this stock should be traded based on MACD
 // \param Object data: Object containing closing data as MACD's input
 // \return true if this stock should be traded based on this filter
@@ -283,6 +327,7 @@ async function filterWithMacd(data) {
 }
 
 export {
+  atrFilter,
   priceFilter,
   dailyVolumeFilter,
   macdFilter,
