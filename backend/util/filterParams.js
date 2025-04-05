@@ -1,5 +1,5 @@
 //==============================================================================
-// Purpose: Buys suitable stocks and distribute them to workers to manage
+// Purpose: Object to provide structure for settings required for filtering
 //==============================================================================
 class FilterParams {
   dataGetter; // function to fetch data to filter
