@@ -27,6 +27,7 @@ const newsBot = {
   RELEVANT_DATE: 1, // Number of days that passed of relevant news article
   ENABLE_POLYGON_API: false, // Make or not make API calls to Polygon.io
   ML_PORT: process.env.ML_PORT, //Port for sentiment analysis API
+  SCANNER_PORT: process.env.SCANNER_PORT, //Port for the Stock Scanner
 
   // How often to fetch from RSS feed in minutes. Default is 10
   RSS_REFRESH: 10,
@@ -628,6 +629,19 @@ const newsBot = {
     for (const org of orgs) {
       this.todayPotentialStockSet.add(org);
     }
+  },
+
+  //----------------------------------------------------------------------------
+  // Send data to the Stock Scanner
+  // \param data: The data to send to the Stock Scanner
+  //----------------------------------------------------------------------------
+  async sendDataToScanner(data) {
+    // TODO: create port for stock scanner
+    httpPUT(
+      `https://localhost:${SCANNER_PORT}/updateTickers`,
+      [data],
+      ["data"]
+    );
   },
 };
 

@@ -1,6 +1,7 @@
 import * as alpaca from "../util/alpaca.js";
 import fs from "fs";
 import { httpPUT } from "../util/httpUtil.js";
+import { keyLocation, certLocation } from "../util/certs.js";
 import {
   atrFilter,
   adxFilter,
@@ -17,10 +18,30 @@ import {
 // This is the main way for the master script to know what stocks to buy
 //==============================================================================
 
+let options = {
+  key: fs.readFileSync(keyLocation),
+  cert: fs.readFileSync(certLocation),
+};
+
+const app = express();
+app.use(express.json());
+https.createServer(options, app).listen(SCANNER_PORT, () => {
+  console.log(`Server running on https://localhost:${SCANNER_PORT}`);
+});
+
 //------------------------------------------------------------------------------
 // Constants and Globals
 //------------------------------------------------------------------------------
 const MASTER_PORT = process.env.MASTER_PORT;
+
+//------------------------------------------------------------------------------
+// Put function to update the potential tickers
+//------------------------------------------------------------------------------
+app.put("/updateTickers", (req, res) => {
+  // TODO: UPDATE THIS FUNCTION
+  // potentialTickers = req.body.potentialTickers;
+  // console.log(potentialTickers);
+});
 
 //------------------------------------------------------------------------------
 // Create batches from a larger array

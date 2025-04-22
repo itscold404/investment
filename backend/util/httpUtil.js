@@ -59,8 +59,7 @@ async function httpPUT(queryURL, data, names) {
 //------------------------------------------------------------------------------
 // HTTP POST function
 // \param string queryURL: the url to request
-// \param array<any> data: the data to send to the master
-// as the field name of the object sent to the master
+// \param array<any> data: the data to send
 // \return the data object. If an error occures, return null instead
 //------------------------------------------------------------------------------
 async function httpPOST(queryURL, data) {

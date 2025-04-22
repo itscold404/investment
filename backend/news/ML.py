@@ -8,13 +8,13 @@ from yahooquery import search
 
 load_dotenv()
 
-#=========================================================================
+#===============================================================================
 # Purpose: provide machine learning functionalities through libraries
-#=========================================================================
+#===============================================================================
 
-# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Constants and other globals
-# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 BATCH_SIZE = 128  # The number of articles to analyze in parallel
 REQUEST_PORT = os.getenv("ML_PORT")  # Port to listen for requests
 PROCESSOR = int(os.getenv("PROCESSOR"))  # If CPU or GPU should be used
@@ -42,15 +42,16 @@ if torch.cuda.is_available():
 app = Flask(__name__)
 
 
-# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Perform sentiment Analysis in parallel
 # \param texts: list of list of texts 
-# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 @app.route("/analyze", methods=["POST"])
 def analyze():
     text_list = request.json
     
-    # Keep track of how many items are in each list to restore them
+    # Keep track of how many items are in each list to restore the order
+    # they were in the orignal list
     data_to_process = [] # Combined list of all texts to process
     num_text = [] # List to hold how many text are in each list
     for texts in text_list:
@@ -83,7 +84,8 @@ def analyze():
             print(f"Batch size before error: {BATCH_SIZE}")
             print("Error:", err)
 
-    # Return the scores in their respecive lists
+    # Put all the values back into one list, in the order they orginally
+    # came in
     results = []
     curr_ind = 0
     for count in num_text:
@@ -93,9 +95,9 @@ def analyze():
     return {"results": results}
 
 
-# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Find ticker symbols of organizations witin texts.
-# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 @app.route("/findTickers", methods=["POST"])
 def findOrgs():
     texts = request.json
@@ -131,9 +133,9 @@ def findOrgs():
     return {"symbols": ticker_symbols}
 
 
-# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # The app
-# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(
         debug=False,

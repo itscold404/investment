@@ -16,7 +16,7 @@ dotevn.config({ path: "../../.env" });
 //------------------------------------------------------------------------------
 // Constants and Globals
 //------------------------------------------------------------------------------
-const BACKEND_PORT = process.env.VITE_BACKEND_PORT;
+const NEWS_SERVER_PORT = process.env.NEWS_SERVER_PORT;
 const FRONT_PORT = process.env.FRONT_END_PORT;
 
 //------------------------------------------------------------------------------
@@ -36,8 +36,8 @@ let options = {
   cert: fs.readFileSync(certLocation),
 };
 
-https.createServer(options, backend).listen(BACKEND_PORT, () => {
-  console.log(`Server running on https://localhost:${BACKEND_PORT}`);
+https.createServer(options, backend).listen(NEWS_SERVER_PORT, () => {
+  console.log(`Server running on https://localhost:${NEWS_SERVER_PORT}`);
 });
 
 // Initialize the newsBot

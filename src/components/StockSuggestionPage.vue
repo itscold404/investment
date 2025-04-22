@@ -114,7 +114,7 @@
 
 <script>
 import axios from "axios";
-const backend_port = import.meta.env.VITE_BACKEND_PORT;
+const backend_port = import.meta.env.NEWS_SERVER_PORT;
 export default {
   data() {
     return {
