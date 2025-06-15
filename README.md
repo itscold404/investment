@@ -1,3 +1,5 @@
+Automated stock trader!! INDICATORS HAVE NOT BEEN TUNED!!
+
 ## Ensure dependencies are installed by running:
 
 - install node_modules: npm ci
