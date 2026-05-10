@@ -21,6 +21,7 @@ const rssFeedURLs = [
   "https://www.globenewswire.com/RssFeed/subjectcode/61-Corporate%20Action/feedTitle/GlobeNewswire%20-%20Corporate%20Action",
   "https://www.globenewswire.com/RssFeed/subjectcode/67-Management%20Statements/feedTitle/GlobeNewswire%20-%20Management%20Statements",
   "https://www.globenewswire.com/RssFeed/subjectcode/89-Conference%20Calls%202f%20Webcasts/feedTitle/GlobeNewswire%20-%20Conference%20Calls,%20Webcasts",
+  "https://feeds.finance.yahoo.com/rss/2.0/headline?s=yhoo,goog&region=US&lang=en-US",
 ];
 
 export default rssFeedURLs;
